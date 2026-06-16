@@ -1,0 +1,131 @@
+/**
+ * Sui auth context (active when EXPO_PUBLIC_SUI_ENABLED=true).
+ *
+ * Replaces the Supabase session/profile with: a zkLogin address + signer, and the
+ * user's own decrypted profile (from the on-chain Profile -> Walrus -> Seal). The
+ * legacy Supabase AuthProvider stays untouched and is used when the flag is off.
+ */
+import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import { loginWithGoogle, restoreSession, logout as zkLogout, type ZkLoginSigner } from '../lib/sui/zkLogin';
+import { clearProfileSession } from '../lib/sui/seal';
+import {
+  loadOwnProfile,
+  saveOwnProfile,
+  type OwnedProfileRef,
+} from '../lib/sui/profileService';
+import type { PingouProfileData } from '../lib/sui/profileStore';
+
+interface SuiAuthValue {
+  address: string | null;
+  signer: ZkLoginSigner | null;
+  /** The user's own Profile object/cap, once created. */
+  profileRef: OwnedProfileRef | null;
+  /** Decrypted own profile, or null if not set up yet. */
+  profile: PingouProfileData | null;
+  /** True during the initial session restore. */
+  loading: boolean;
+  /** True while a profile read/write is in flight. */
+  busy: boolean;
+  login: () => Promise<void>;
+  logout: () => Promise<void>;
+  saveProfile: (data: PingouProfileData) => Promise<void>;
+  refresh: () => Promise<void>;
+}
+
+const SuiAuthContext = createContext<SuiAuthValue>({} as SuiAuthValue);
+export const useSuiAuth = () => useContext(SuiAuthContext);
+
+export const SuiAuthProvider = ({ children }: { children: React.ReactNode }) => {
+  const [address, setAddress] = useState<string | null>(null);
+  const [signer, setSigner] = useState<ZkLoginSigner | null>(null);
+  const [profileRef, setProfileRef] = useState<OwnedProfileRef | null>(null);
+  const [profile, setProfile] = useState<PingouProfileData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+
+  const loadProfileFor = useCallback(async (addr: string, s: ZkLoginSigner) => {
+    try {
+      const res = await loadOwnProfile(addr, s);
+      if (res) {
+        setProfileRef(res.ref);
+        setProfile(res.data);
+      } else {
+        setProfileRef(null);
+        setProfile(null);
+      }
+    } catch (err) {
+      console.warn('Failed to load Sui profile:', err);
+    }
+  }, []);
+
+  // Restore an existing session on launch.
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const session = await restoreSession();
+        if (!mounted) return;
+        if (session) {
+          setAddress(session.address);
+          setSigner(session.signer);
+          await loadProfileFor(session.address, session.signer);
+        }
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, [loadProfileFor]);
+
+  const login = useCallback(async () => {
+    setBusy(true);
+    try {
+      const session = await loginWithGoogle();
+      setAddress(session.address);
+      setSigner(session.signer);
+      await loadProfileFor(session.address, session.signer);
+    } finally {
+      setBusy(false);
+    }
+  }, [loadProfileFor]);
+
+  const logout = useCallback(async () => {
+    clearProfileSession();
+    await zkLogout();
+    setAddress(null);
+    setSigner(null);
+    setProfileRef(null);
+    setProfile(null);
+  }, []);
+
+  const saveProfile = useCallback(
+    async (data: PingouProfileData) => {
+      if (!address || !signer) throw new Error('Not signed in');
+      setBusy(true);
+      try {
+        // Preserve the existing share-code across edits (it's committed on-chain).
+        const merged = { ...data, shareCode: data.shareCode ?? profile?.shareCode };
+        await saveOwnProfile(address, signer, merged);
+        // Reload so we get the canonical decrypted profile (incl. a share-code
+        // freshly minted during a first-time create).
+        await loadProfileFor(address, signer);
+      } finally {
+        setBusy(false);
+      }
+    },
+    [address, signer, profile, loadProfileFor]
+  );
+
+  const refresh = useCallback(async () => {
+    if (address && signer) await loadProfileFor(address, signer);
+  }, [address, signer, loadProfileFor]);
+
+  return (
+    <SuiAuthContext.Provider
+      value={{ address, signer, profileRef, profile, loading, busy, login, logout, saveProfile, refresh }}>
+      {children}
+    </SuiAuthContext.Provider>
+  );
+};

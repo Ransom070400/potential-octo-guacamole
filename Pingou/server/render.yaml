@@ -1,0 +1,19 @@
+# Render Blueprint — deploy the sponsor backend as a web service.
+# In Render: New + → Blueprint → connect your repo → it reads this file.
+# Then set ENOKI_PRIVATE_KEY in the dashboard (sync:false = not stored in git).
+services:
+  - type: web
+    name: pingou-sponsor
+    runtime: node
+    plan: free
+    rootDir: Pingou/server
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: ENOKI_PRIVATE_KEY
+        sync: false # paste your enoki_private_... in the Render dashboard
+      - key: PINGOU_PACKAGE_ID
+        value: '0xd2b46e84434c141bc5d31e80e7c76376bf9c54e3c416bd84c39997d8c9b3c0ae'
+      - key: SUI_NETWORK
+        value: testnet
