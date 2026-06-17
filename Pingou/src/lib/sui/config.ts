@@ -89,6 +89,10 @@ function deriveSponsorUrl(): string {
 
 export const SPONSOR_API_URL = deriveSponsorUrl();
 
+/** Shared secret for the sponsor backend (must match the server's SPONSOR_SECRET).
+ *  Bundled into the app, so it deters casual abuse, not a determined attacker. */
+export const SPONSOR_SECRET = env.EXPO_PUBLIC_SPONSOR_SECRET ?? '';
+
 /**
  * Throws if a required value is missing while Sui is enabled. Call at the entry
  * of a Sui flow so misconfiguration fails loudly instead of mid-transaction.

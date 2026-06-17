@@ -13,9 +13,10 @@ is the simplest free path.
    (root dir `Pingou/server`, build `npm install`, start `npm start`, health `/health`).
    - Or **New + → Web Service** manually: Root Directory `Pingou/server`, Build `npm install`,
      Start `npm start`.
-3. Set the secret env var in the dashboard:
-   - `ENOKI_PRIVATE_KEY = enoki_private_…`  (the others come from the blueprint:
-     `PINGOU_PACKAGE_ID`, `SUI_NETWORK=testnet`)
+3. Set the secret env vars in the dashboard (blueprint marks them `sync:false`):
+   - `ENOKI_PRIVATE_KEY = enoki_private_…`
+   - `SPONSOR_SECRET = <same value as the app's EXPO_PUBLIC_SPONSOR_SECRET>`
+   (`PINGOU_PACKAGE_ID`, `SUI_NETWORK` come from the blueprint.)
 4. Deploy → you get `https://pingou-sponsor.onrender.com` (or similar).
 5. Verify: open `https://…onrender.com/health` → `{"ok":true,"network":"testnet"}`.
 

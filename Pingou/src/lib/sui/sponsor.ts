@@ -8,7 +8,7 @@
 import type { Transaction } from '@mysten/sui/transactions';
 import { fromBase64, toBase64 } from '@mysten/sui/utils';
 import { suiClient } from './suiClient';
-import { SPONSOR_API_URL } from './config';
+import { SPONSOR_API_URL, SPONSOR_SECRET } from './config';
 import type { ZkLoginSigner } from './zkLogin';
 
 async function postJson<T>(path: string, body: unknown): Promise<T> {
@@ -17,7 +17,10 @@ async function postJson<T>(path: string, body: unknown): Promise<T> {
   try {
     res = await fetch(url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...(SPONSOR_SECRET ? { Authorization: `Bearer ${SPONSOR_SECRET}` } : {}),
+      },
       body: JSON.stringify(body),
     });
   } catch (e: any) {

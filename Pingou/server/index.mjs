@@ -3,14 +3,16 @@
  *
  * Holds the Enoki PRIVATE key and sponsors a tightly-scoped set of transactions
  * (only our `profile` module's calls) so zkLogin users never need SUI for gas.
- * Two endpoints, mirroring Enoki's sponsor/execute split:
  *
  *   POST /sponsor  { sender, transactionKindBytes (base64) } -> { bytes, digest }
  *   POST /execute  { digest, signature }                     -> { digest }
  *
- * The app builds a tx kind, we wrap+sponsor it, the user signs the returned bytes
- * with their zkLogin signer, then we execute. We restrict `allowedMoveCallTargets`
- * server-side so a stolen client can't make us pay for arbitrary transactions.
+ * Abuse protection (this endpoint spends YOUR gas):
+ *   - allowedMoveCallTargets restricts sponsorship to profile:: calls only.
+ *   - Optional shared secret (SPONSOR_SECRET) — required if set. NOTE the app ships
+ *     it in EXPO_PUBLIC_*, so it's extractable: it deters casual/bot abuse, not a
+ *     determined attacker. For mainnet, validate the zkLogin JWT instead (TODO).
+ *   - Rate limiting per sender address and per client IP.
  *
  * Run:  cp .env.example .env  (fill ENOKI_PRIVATE_KEY + PINGOU_PACKAGE_ID), then
  *       npm install && npm run dev
@@ -22,6 +24,9 @@ const PORT = Number(process.env.PORT ?? 8787);
 const NETWORK = process.env.SUI_NETWORK ?? 'testnet';
 const ENOKI_PRIVATE_KEY = process.env.ENOKI_PRIVATE_KEY;
 const PACKAGE_ID = process.env.PINGOU_PACKAGE_ID;
+const SPONSOR_SECRET = process.env.SPONSOR_SECRET ?? '';
+const RATE_MAX = Number(process.env.RATE_MAX ?? 30); // requests per window per key
+const RATE_WINDOW_MS = Number(process.env.RATE_WINDOW_MS ?? 60_000);
 
 if (!ENOKI_PRIVATE_KEY || !PACKAGE_ID) {
   console.error('Missing ENOKI_PRIVATE_KEY or PINGOU_PACKAGE_ID in env (.env).');
@@ -39,11 +44,37 @@ const ALLOWED_TARGETS = [
   `${PACKAGE_ID}::profile::remove`,
 ];
 
+// ── Rate limiting (sliding window, in-memory) ──────────────────────────────
+const hits = new Map(); // key -> [timestamps]
+function tooMany(key) {
+  const now = Date.now();
+  const arr = (hits.get(key) ?? []).filter((t) => now - t < RATE_WINDOW_MS);
+  arr.push(now);
+  hits.set(key, arr);
+  return arr.length > RATE_MAX;
+}
+setInterval(() => {
+  const now = Date.now();
+  for (const [k, arr] of hits) {
+    const fresh = arr.filter((t) => now - t < RATE_WINDOW_MS);
+    if (fresh.length) hits.set(k, fresh);
+    else hits.delete(k);
+  }
+}, RATE_WINDOW_MS).unref();
+
+function authorized(req) {
+  if (!SPONSOR_SECRET) return true; // open (dev) when no secret configured
+  return (req.headers['authorization'] || '') === `Bearer ${SPONSOR_SECRET}`;
+}
+function clientIp(req) {
+  const fwd = req.headers['x-forwarded-for'];
+  return (typeof fwd === 'string' && fwd.split(',')[0].trim()) || req.socket.remoteAddress || 'unknown';
+}
+
 function send(res, status, body) {
   res.writeHead(status, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify(body));
 }
-
 async function readJson(req) {
   const chunks = [];
   for await (const c of req) chunks.push(c);
@@ -52,32 +83,39 @@ async function readJson(req) {
 
 const server = createServer(async (req, res) => {
   try {
-    if (req.method === 'POST' && req.url === '/sponsor') {
-      const { sender, transactionKindBytes } = await readJson(req);
-      if (!sender || !transactionKindBytes) {
-        return send(res, 400, { error: 'sender and transactionKindBytes required' });
-      }
-      const sponsored = await enoki.createSponsoredTransaction({
-        network: NETWORK,
-        sender,
-        transactionKindBytes,
-        allowedAddresses: [sender],
-        allowedMoveCallTargets: ALLOWED_TARGETS,
-      });
-      return send(res, 200, { bytes: sponsored.bytes, digest: sponsored.digest });
+    if (req.method === 'GET' && req.url === '/health') {
+      return send(res, 200, { ok: true, network: NETWORK });
     }
 
-    if (req.method === 'POST' && req.url === '/execute') {
+    // Everything below spends gas — gate it.
+    if (req.method === 'POST' && (req.url === '/sponsor' || req.url === '/execute')) {
+      if (!authorized(req)) return send(res, 401, { error: 'unauthorized' });
+      const ip = clientIp(req);
+      if (tooMany(`ip:${ip}`)) return send(res, 429, { error: 'rate limit exceeded' });
+
+      if (req.url === '/sponsor') {
+        const { sender, transactionKindBytes } = await readJson(req);
+        if (!sender || !transactionKindBytes) {
+          return send(res, 400, { error: 'sender and transactionKindBytes required' });
+        }
+        if (tooMany(`addr:${sender}`)) return send(res, 429, { error: 'rate limit exceeded' });
+        const sponsored = await enoki.createSponsoredTransaction({
+          network: NETWORK,
+          sender,
+          transactionKindBytes,
+          allowedAddresses: [sender],
+          allowedMoveCallTargets: ALLOWED_TARGETS,
+        });
+        return send(res, 200, { bytes: sponsored.bytes, digest: sponsored.digest });
+      }
+
+      // /execute
       const { digest, signature } = await readJson(req);
       if (!digest || !signature) {
         return send(res, 400, { error: 'digest and signature required' });
       }
       const result = await enoki.executeSponsoredTransaction({ digest, signature });
       return send(res, 200, { digest: result.digest });
-    }
-
-    if (req.method === 'GET' && req.url === '/health') {
-      return send(res, 200, { ok: true, network: NETWORK });
     }
 
     send(res, 404, { error: 'not found' });
@@ -87,4 +125,8 @@ const server = createServer(async (req, res) => {
   }
 });
 
-server.listen(PORT, () => console.log(`pingou-sponsor listening on :${PORT} (${NETWORK})`));
+server.listen(PORT, () =>
+  console.log(
+    `pingou-sponsor listening on :${PORT} (${NETWORK}) — auth:${SPONSOR_SECRET ? 'on' : 'OFF'} rate:${RATE_MAX}/${RATE_WINDOW_MS}ms`
+  )
+);
