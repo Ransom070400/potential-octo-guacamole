@@ -13,12 +13,19 @@ import {
   buildCreateProfileTx,
   buildSetBlobTx,
   buildExchangeTx,
+  buildRemoveAccessTx,
   getProfile,
   getCreatedProfileRef,
   findOwnedProfile,
   getConnectionAddresses,
 } from './profile';
-import { getCachedCard, setCachedCard, type CachedCard } from './profileCache';
+import {
+  getCachedCard,
+  setCachedCard,
+  getCachedProfile,
+  setCachedProfile,
+  type CachedCard,
+} from './profileCache';
 import { generateShareCode, shareCodeBytes, type ConnectPayload } from './share';
 import { sponsorAndExecute } from './sponsor';
 import type { ZkLoginSigner } from './zkLogin';
@@ -65,7 +72,9 @@ export async function saveOwnProfile(
   }
   if (!shareCode) shareCode = generateShareCode(); // safety net
 
-  const { blobId } = await saveProfile(ref.profileObjectId, { ...data, shareCode });
+  const full = { ...data, shareCode };
+  const { blobId } = await saveProfile(ref.profileObjectId, full);
+  await setCachedProfile(blobId, full); // so the reload after save is instant
   await sponsorAndExecute(
     buildSetBlobTx(ref.profileObjectId, ref.ownerCapId, blobId),
     signer,
@@ -83,6 +92,10 @@ export async function loadOwnProfile(
   if (!ref) return null;
   const onchain = await getProfile(ref.profileObjectId);
   if (!onchain?.blobId) return null;
+  // Cache-first: own profile is keyed by the immutable blob id, so once decrypted
+  // it loads instantly on next launch (no Walrus/Seal) until the profile changes.
+  const cached = await getCachedProfile(onchain.blobId);
+  if (cached) return { ref, data: cached };
   const data = await loadProfile({
     profileObjectId: ref.profileObjectId,
     blobId: onchain.blobId,
@@ -90,6 +103,7 @@ export async function loadOwnProfile(
     address,
     signer,
   });
+  await setCachedProfile(onchain.blobId, data);
   return { ref, data };
 }
 
@@ -158,6 +172,25 @@ export async function loadConnectionCard(
   const card: CachedCard = { fullname: data.fullname, avatar: data.avatar, bio: data.bio };
   await setCachedCard(onchain.blobId, card);
   return card;
+}
+
+/**
+ * Delete a connection: revoke the peer's access to my card (sponsored on-chain
+ * `remove`), which also drops them from my connections list (it's derived from my
+ * allow table). Needs my own Profile ref.
+ */
+export async function removeConnection(
+  address: string,
+  signer: ZkLoginSigner,
+  peerAddress: string
+): Promise<void> {
+  const ref = await findOwnedProfile(address);
+  if (!ref) throw new Error('You have no profile');
+  await sponsorAndExecute(
+    buildRemoveAccessTx(ref.profileObjectId, ref.ownerCapId, peerAddress),
+    signer,
+    address
+  );
 }
 
 export interface Connection {

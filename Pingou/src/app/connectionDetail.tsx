@@ -19,7 +19,7 @@ import { supabase } from '~/src/lib/supabase';
 import { useAuth } from '~/src/context/AuthProvider';
 import { useSuiAuth } from '~/src/context/SuiAuthProvider';
 import { SUI_ENABLED } from '~/src/lib/sui/config';
-import { loadPeerProfile } from '~/src/lib/sui/profileService';
+import { loadPeerProfile, removeConnection } from '~/src/lib/sui/profileService';
 import type { PingouProfileData } from '~/src/lib/sui/profileStore';
 import { ProfileType } from '~/src/types/ProfileTypes';
 import { buildSocialLinks } from '~/src/utils/buildSocialLinks';
@@ -32,7 +32,7 @@ export default function ConnectionDetail() {
 
 // Sui: show a peer's decrypted profile (works once they've granted us access).
 function SuiConnectionDetail() {
-  const { profileId } = useLocalSearchParams<{ profileId: string; address?: string }>();
+  const { profileId, address: peerAddress } = useLocalSearchParams<{ profileId: string; address?: string }>();
   const insets = useSafeAreaInsets();
   const isDark = useColorScheme() === 'dark';
   const backIconColor = isDark ? '#fff' : '#111';
@@ -41,6 +41,35 @@ function SuiConnectionDetail() {
   const [profile, setProfile] = useState<PingouProfileData | null>(null);
   const [loading, setLoading] = useState(true);
   const [denied, setDenied] = useState(false);
+  const [removing, setRemoving] = useState(false);
+
+  const handleRemove = () => {
+    if (!myAddress || !signer || !peerAddress) return;
+    Feedback.heavy();
+    Alert.alert(
+      'Remove connection',
+      `Remove ${profile?.fullname ?? 'this person'}? They'll lose access to your card.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: async () => {
+            setRemoving(true);
+            try {
+              await removeConnection(myAddress, signer, peerAddress);
+              Feedback.success();
+              router.back();
+            } catch (e: any) {
+              Alert.alert('Error', e?.message ?? 'Could not remove connection');
+            } finally {
+              setRemoving(false);
+            }
+          },
+        },
+      ]
+    );
+  };
 
   const load = React.useCallback(async () => {
     if (!profileId || !myAddress || !signer) return;
@@ -164,6 +193,18 @@ function SuiConnectionDetail() {
             })}
           </View>
         )}
+
+        {/* Remove connection */}
+        <TouchableOpacity
+          onPress={handleRemove}
+          disabled={removing}
+          className="mx-4 mt-6 flex-row items-center justify-center rounded-2xl bg-white py-3.5 dark:bg-neutral-800"
+          style={removing ? { opacity: 0.5 } : undefined}>
+          <Trash2 size={16} color="#EF4444" />
+          <Text className="ml-2 text-sm font-medium text-red-500">
+            {removing ? 'Removing…' : 'Remove connection'}
+          </Text>
+        </TouchableOpacity>
       </ScrollView>
     </View>
   );

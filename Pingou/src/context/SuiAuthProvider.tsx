@@ -6,8 +6,10 @@
  * legacy Supabase AuthProvider stays untouched and is used when the flag is off.
  */
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import { Alert } from 'react-native';
 import { loginWithGoogle, restoreSession, logout as zkLogout, type ZkLoginSigner } from '../lib/sui/zkLogin';
 import { clearProfileSession } from '../lib/sui/seal';
+import { connectRealtime, disconnectRealtime } from '../lib/sui/realtime';
 import {
   loadOwnProfile,
   saveOwnProfile,
@@ -68,6 +70,7 @@ export const SuiAuthProvider = ({ children }: { children: React.ReactNode }) => 
         if (session) {
           setAddress(session.address);
           setSigner(session.signer);
+          connectRealtime(session.address);
           await loadProfileFor(session.address, session.signer);
         }
       } finally {
@@ -85,6 +88,7 @@ export const SuiAuthProvider = ({ children }: { children: React.ReactNode }) => 
       const session = await loginWithGoogle();
       setAddress(session.address);
       setSigner(session.signer);
+      connectRealtime(session.address);
       await loadProfileFor(session.address, session.signer);
     } finally {
       setBusy(false);
@@ -93,6 +97,7 @@ export const SuiAuthProvider = ({ children }: { children: React.ReactNode }) => 
 
   const logout = useCallback(async () => {
     clearProfileSession();
+    disconnectRealtime();
     await zkLogout();
     setAddress(null);
     setSigner(null);
@@ -103,17 +108,29 @@ export const SuiAuthProvider = ({ children }: { children: React.ReactNode }) => 
   const saveProfile = useCallback(
     async (data: PingouProfileData) => {
       if (!address || !signer) throw new Error('Not signed in');
+      // Preserve the existing share-code across edits (it's committed on-chain).
+      const merged = { ...data, shareCode: data.shareCode ?? profile?.shareCode };
+      const prev = profile;
+
+      // Optimistic: reflect the change instantly so the UI feels immediate.
+      setProfile(merged);
       setBusy(true);
-      try {
-        // Preserve the existing share-code across edits (it's committed on-chain).
-        const merged = { ...data, shareCode: data.shareCode ?? profile?.shareCode };
-        await saveOwnProfile(address, signer, merged);
-        // Reload so we get the canonical decrypted profile (incl. a share-code
-        // freshly minted during a first-time create).
-        await loadProfileFor(address, signer);
-      } finally {
-        setBusy(false);
-      }
+
+      // Persist on-chain (Seal + Walrus + sponsored tx) in the background so the
+      // caller can navigate away right away.
+      (async () => {
+        try {
+          await saveOwnProfile(address, signer, merged);
+          // Reconcile with the canonical state (profile ref + freshly-minted
+          // share-code on first create).
+          await loadProfileFor(address, signer);
+        } catch (e: any) {
+          setProfile(prev); // roll back the optimistic update
+          Alert.alert('Save failed', e?.message ?? 'Could not save your profile. Please try again.');
+        } finally {
+          setBusy(false);
+        }
+      })();
     },
     [address, signer, profile, loadProfileFor]
   );

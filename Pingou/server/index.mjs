@@ -18,6 +18,7 @@
  *       npm install && npm run dev
  */
 import { createServer } from 'node:http';
+import { WebSocketServer } from 'ws';
 import { EnokiClient } from '@mysten/enoki';
 
 const PORT = Number(process.env.PORT ?? 8787);
@@ -125,8 +126,61 @@ const server = createServer(async (req, res) => {
   }
 });
 
+// ── Realtime relay (WebSocket) ─────────────────────────────────────────────
+// Clients register their Sui address; a `notify` from one client is pushed to the
+// target address's open sockets — so a scanned device sees "Connected!" instantly
+// instead of polling the chain.
+const wss = new WebSocketServer({
+  server,
+  verifyClient: (info, done) => {
+    if (!SPONSOR_SECRET) return done(true);
+    const token = new URL(info.req.url, 'http://x').searchParams.get('token');
+    done(token === SPONSOR_SECRET, 401, 'unauthorized');
+  },
+});
+const sockets = new Map(); // address -> Set<ws>
+
+wss.on('connection', (ws) => {
+  let addr = null;
+  ws.on('message', (raw) => {
+    let msg;
+    try {
+      msg = JSON.parse(raw.toString());
+    } catch {
+      return;
+    }
+    if (msg.type === 'register' && typeof msg.address === 'string') {
+      addr = msg.address;
+      if (!sockets.has(addr)) sockets.set(addr, new Set());
+      sockets.get(addr).add(ws);
+    } else if (msg.type === 'notify' && typeof msg.to === 'string') {
+      const targets = sockets.get(msg.to);
+      if (targets) {
+        const out = JSON.stringify({
+          type: 'connected',
+          from: msg.from,
+          name: msg.name,
+          avatar: msg.avatar,
+          profileId: msg.profileId,
+        });
+        for (const c of targets) {
+          try {
+            c.send(out);
+          } catch {}
+        }
+      }
+    }
+  });
+  ws.on('close', () => {
+    if (addr && sockets.has(addr)) {
+      sockets.get(addr).delete(ws);
+      if (!sockets.get(addr).size) sockets.delete(addr);
+    }
+  });
+});
+
 server.listen(PORT, () =>
   console.log(
-    `pingou-sponsor listening on :${PORT} (${NETWORK}) — auth:${SPONSOR_SECRET ? 'on' : 'OFF'} rate:${RATE_MAX}/${RATE_WINDOW_MS}ms`
+    `pingou-sponsor listening on :${PORT} (${NETWORK}) — auth:${SPONSOR_SECRET ? 'on' : 'OFF'} rate:${RATE_MAX}/${RATE_WINDOW_MS}ms ws:on`
   )
 );

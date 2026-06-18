@@ -51,6 +51,21 @@ export function buildAddAccessTx(
   return tx;
 }
 
+/** Revoke `account`'s access — used to delete a connection (drops them from my list
+ *  and stops them decrypting my card). */
+export function buildRemoveAccessTx(
+  profileObjectId: string,
+  ownerCapId: string,
+  account: string
+): Transaction {
+  const tx = new Transaction();
+  tx.moveCall({
+    target: target('remove'),
+    arguments: [tx.object(profileObjectId), tx.object(ownerCapId), tx.pure.address(account)],
+  });
+  return tx;
+}
+
 /**
  * One sponsored tx that performs a full two-way exchange when I scan a peer:
  *   - `add_self(peer, peerCode)` — grants ME access to the peer's profile.

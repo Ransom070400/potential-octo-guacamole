@@ -9,16 +9,20 @@ import { useSuiAuth } from '~/src/context/SuiAuthProvider';
 import { SUI_ENABLED } from '~/src/lib/sui/config';
 import { exchange } from '~/src/lib/sui/profileService';
 import { parseConnectQR } from '~/src/lib/sui/share';
+import { markAnnounced } from '~/src/lib/sui/announced';
+import { notifyConnection } from '~/src/lib/sui/realtime';
 import { ProfileType } from '~/src/types/ProfileTypes';
 import { router } from 'expo-router';
 import { parseEventCodeFromScan, joinEventByCode } from '~/src/utils/events';
 import ConnectionToast, { ConnectionToastData } from '~/src/components/ConnectionToast';
+import ConnectionSuccess, { ConnectionSuccessData } from '~/src/components/ConnectionSuccess';
 
 const Scanner = () => {
   const [facing] = useState<CameraType>('back');
   const [permission, requestPermission] = useCameraPermissions();
   const [scannedData, setScannedData] = useState<BarcodeScanningResult | null>(null);
   const [toast, setToast] = useState<ConnectionToastData | null>(null);
+  const [success, setSuccess] = useState<ConnectionSuccessData | null>(null);
   const { session } = useAuth();
   const sui = useSuiAuth();
 
@@ -49,19 +53,32 @@ const Scanner = () => {
       return;
     }
 
+    // Pop the overlay immediately with a spinner; resolve it when the exchange lands.
+    Feedback.medium();
+    setSuccess({ loading: true });
     try {
       const data = await exchange(address, signer, profileRef, peer);
-      Feedback.ping();
-      setToast({
+      Feedback.success();
+      markAnnounced(peer.address); // so my own home poll doesn't re-pop this
+      // Instantly notify the scanned device so it pops the checkmark too.
+      notifyConnection(peer.address, {
+        from: address,
+        name: sui.profile?.fullname,
+        avatar: sui.profile?.avatar ?? undefined,
+        profileId: profileRef.profileObjectId,
+      });
+      setSuccess({
+        loading: false,
         name: data.fullname,
         avatarUrl: data.avatar ?? null,
-        onPress: () =>
+        onViewProfile: () =>
           router.push({
             pathname: '/connectionDetail',
             params: { profileId: peer.profileId, address: peer.address },
           }),
       });
     } catch (e: any) {
+      setSuccess(null);
       Alert.alert('Connection failed', e?.message ?? 'Something went wrong');
     }
   };
@@ -176,8 +193,9 @@ const Scanner = () => {
         </View>
       </CameraView>
 
-      {/* Connection success banner */}
+      {/* Connection success banner (Supabase mode) + checkmark popup (Sui mode) */}
       <ConnectionToast data={toast} onHide={() => setToast(null)} />
+      <ConnectionSuccess data={success} onClose={() => setSuccess(null)} />
     </View>
   );
 };

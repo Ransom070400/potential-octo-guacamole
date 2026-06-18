@@ -85,7 +85,16 @@
         "android.permission.RECORD_AUDIO",
         "android.permission.CAMERA"
       ],
-      "package": "com.anonymous.pingou"
+      "package": "com.anonymous.pingou",
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "category": ["DEFAULT", "BROWSABLE"],
+          "data": {
+            "scheme": "com.googleusercontent.apps.1023115981397-j69hp9kk3nveved0mbfduhcokond98mo"
+          }
+        }
+      ]
     }
   }
 }
