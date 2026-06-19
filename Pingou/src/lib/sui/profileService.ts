@@ -25,9 +25,12 @@ import {
   getCachedProfile,
   setCachedProfile,
   setCachedOwnProfile,
+  getActiveCap,
+  setActiveCap,
   type CachedCard,
 } from './profileCache';
 import { generateShareCode, shareCodeBytes, type ConnectPayload } from './share';
+import { shareCodeHash } from './shareHash';
 import { sponsorAndExecute } from './sponsor';
 import type { ZkLoginSigner } from './zkLogin';
 
@@ -38,9 +41,21 @@ export interface OwnedProfileRef {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+function bytesEqual(a: Uint8Array, b: Uint8Array): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+  return true;
+}
+
+/** findOwnedProfile honouring the locally-pinned active cap (a re-created profile). */
+async function findOwned(address: string): Promise<OwnedProfileRef | null> {
+  const active = await getActiveCap(address);
+  return findOwnedProfile(address, active ?? undefined);
+}
+
 async function findOwnedWithRetry(address: string, tries = 6): Promise<OwnedProfileRef | null> {
   for (let i = 0; i < tries; i++) {
-    const found = await findOwnedProfile(address);
+    const found = await findOwned(address);
     if (found) return found;
     await sleep(800);
   }
@@ -55,21 +70,30 @@ async function findOwnedWithRetry(address: string, tries = 6): Promise<OwnedProf
 export async function saveOwnProfile(
   address: string,
   signer: ZkLoginSigner,
-  data: PingouProfileData
+  data: PingouProfileData,
+  opts?: { forceCreate?: boolean }
 ): Promise<OwnedProfileRef> {
-  let ref = await findOwnedProfile(address);
+  // forceCreate mints a brand-new profile even if one exists — used to replace a
+  // profile whose immutable share_hash is wrong (can't be fixed in place).
+  let ref = opts?.forceCreate ? null : await findOwned(address);
   let shareCode = data.shareCode;
 
   if (!ref) {
     // New profile: the share-code's hash must be set at creation (immutable after).
-    // Lazy import keeps expo-crypto out of the Node-importable module graph.
-    const { shareCodeHash } = await import('./shareHash');
     shareCode = generateShareCode();
-    const shareHash = await shareCodeHash(shareCode);
+    const shareHash = shareCodeHash(shareCode);
     const digest = await sponsorAndExecute(buildCreateProfileTx('', shareHash), signer, address);
     // Read the new object ids from the tx effects (fast) instead of polling.
     ref = (await getCreatedProfileRef(digest)) ?? (await findOwnedWithRetry(address));
     if (!ref) throw new Error('Profile created but not yet indexed; try again.');
+    // Pin this as the active profile so it supersedes any older (broken) one.
+    await setActiveCap(address, ref.ownerCapId);
+    // Verify the committed hash matches locally — catches any on-device hash bug
+    // up front instead of as a later EBadShareCode on every scan.
+    const oc = await getProfile(ref.profileObjectId);
+    if (oc?.shareHash && !bytesEqual(oc.shareHash, shareHash)) {
+      throw new Error('Share-code hash mismatch on this device — please update the app.');
+    }
   }
   if (!shareCode) shareCode = generateShareCode(); // safety net
 
@@ -85,12 +109,16 @@ export async function saveOwnProfile(
   return ref;
 }
 
-/** Load + decrypt the caller's own profile (owner always has access). */
+/**
+ * Load + decrypt the caller's own profile (owner always has access). `hashValid` is
+ * false when the profile's immutable on-chain share_hash doesn't match its share-code
+ * — i.e. it can never complete an exchange and should be re-created.
+ */
 export async function loadOwnProfile(
   address: string,
   signer: ZkLoginSigner
-): Promise<{ ref: OwnedProfileRef; data: PingouProfileData } | null> {
-  const ref = await findOwnedProfile(address);
+): Promise<{ ref: OwnedProfileRef; data: PingouProfileData; hashValid: boolean } | null> {
+  const ref = await findOwned(address);
   if (!ref) return null;
   const onchain = await getProfile(ref.profileObjectId);
   if (!onchain?.blobId) return null;
@@ -108,7 +136,11 @@ export async function loadOwnProfile(
     await setCachedProfile(onchain.blobId, data);
   }
   await setCachedOwnProfile(address, { ref, data }); // for instant render next sign-in
-  return { ref, data };
+  const hashValid =
+    !!onchain.shareHash &&
+    !!data.shareCode &&
+    bytesEqual(onchain.shareHash, shareCodeHash(data.shareCode));
+  return { ref, data, hashValid };
 }
 
 /** Load + decrypt a peer's profile by id (only works once I have access). */
@@ -188,7 +220,7 @@ export async function removeConnection(
   signer: ZkLoginSigner,
   peerAddress: string
 ): Promise<void> {
-  const ref = await findOwnedProfile(address);
+  const ref = await findOwned(address);
   if (!ref) throw new Error('You have no profile');
   await sponsorAndExecute(
     buildRemoveAccessTx(ref.profileObjectId, ref.ownerCapId, peerAddress),
@@ -204,7 +236,7 @@ export interface Connection {
 
 /** My connections = addresses in my Profile's allow table, resolved to their profiles. */
 export async function getMyConnections(address: string): Promise<Connection[]> {
-  const ref = await findOwnedProfile(address);
+  const ref = await findOwned(address);
   if (!ref) return [];
   const onchain = await getProfile(ref.profileObjectId);
   if (!onchain?.allowTableId) return [];

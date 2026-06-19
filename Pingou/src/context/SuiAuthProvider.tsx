@@ -5,7 +5,7 @@
  * user's own decrypted profile (from the on-chain Profile -> Walrus -> Seal). The
  * legacy Supabase AuthProvider stays untouched and is used when the flag is off.
  */
-import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
 import { Alert } from 'react-native';
 import { loginWithGoogle, loginWithApple, restoreSession, logout as zkLogout, type ZkLoginSigner } from '../lib/sui/zkLogin';
 
@@ -48,13 +48,33 @@ export const SuiAuthProvider = ({ children }: { children: React.ReactNode }) => 
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
 
+  // Addresses we've already auto-healed this session (avoid re-create loops).
+  const healedFor = useRef<Set<string>>(new Set());
+
   const loadProfileFor = useCallback(
     async (addr: string, s: ZkLoginSigner) => {
       try {
         const res = await loadOwnProfile(addr, s);
-        if (res) {
+        if (res && res.hashValid) {
           setProfileRef(res.ref);
           setProfile(res.data);
+        } else if (res && !res.hashValid) {
+          // The profile's immutable share_hash is wrong (created before the hash
+          // fix), so it can never complete an exchange. Re-create a correct one
+          // once, preserving the user's details, and switch to it. Show the card
+          // meanwhile so it doesn't flash an empty state.
+          setProfile(res.data);
+          if (healedFor.current.has(addr)) {
+            setProfileRef(res.ref);
+            return;
+          }
+          healedFor.current.add(addr);
+          await saveOwnProfile(addr, s, res.data, { forceCreate: true });
+          const fresh = await loadOwnProfile(addr, s);
+          if (fresh) {
+            setProfileRef(fresh.ref);
+            setProfile(fresh.data);
+          }
         } else {
           // Confirmed: no profile for this address on the CURRENT package (the
           // lookup succeeded — RPC errors throw and are caught below). Drop any

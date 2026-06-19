@@ -134,6 +134,8 @@ export interface OnChainProfile {
   blobId: string;
   /** Object id of the `allow` Table — query its dynamic fields for connections. */
   allowTableId: string;
+  /** sha2_256 of the share-code committed at creation (immutable). */
+  shareHash: Uint8Array | null;
 }
 
 /** Read a Profile object's fields by id. */
@@ -150,6 +152,7 @@ export async function getProfile(profileObjectId: string): Promise<OnChainProfil
     owner: f.owner,
     blobId: f.blob_id,
     allowTableId: f.allow?.fields?.id?.id,
+    shareHash: Array.isArray(f.share_hash) ? Uint8Array.from(f.share_hash) : null,
   };
 }
 
@@ -173,17 +176,26 @@ export async function getConnectionAddresses(allowTableId: string): Promise<stri
   return out;
 }
 
-/** Find the Profile + OwnerCap owned by an address (zkLogin returns no object ids). */
+/**
+ * Find the Profile + OwnerCap owned by an address (zkLogin returns no object ids).
+ * If `activeCapId` is given and the address still owns it, that cap is preferred —
+ * so a freshly re-created (correct) profile wins over an older broken one that
+ * `getOwnedObjects` might list first.
+ */
 export async function findOwnedProfile(
-  address: string
+  address: string,
+  activeCapId?: string
 ): Promise<{ profileObjectId: string; ownerCapId: string } | null> {
   const caps = await suiClient.getOwnedObjects({
     owner: address,
     filter: { StructType: `${PINGOU_PACKAGE_ID}::profile::OwnerCap` },
     options: { showContent: true },
   });
-  const cap = caps.data[0];
-  if (!cap?.data?.content || cap.data.content.dataType !== 'moveObject') return null;
-  const fields = cap.data.content.fields as Record<string, any>;
-  return { profileObjectId: fields.profile_id, ownerCapId: cap.data.objectId };
+  const valid = caps.data.filter(
+    (c) => c.data?.content && c.data.content.dataType === 'moveObject'
+  );
+  if (!valid.length) return null;
+  const cap = (activeCapId && valid.find((c) => c.data!.objectId === activeCapId)) || valid[0];
+  const fields = (cap.data!.content as any).fields as Record<string, any>;
+  return { profileObjectId: fields.profile_id, ownerCapId: cap.data!.objectId };
 }

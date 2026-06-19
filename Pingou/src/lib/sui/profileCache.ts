@@ -88,3 +88,26 @@ export async function clearCachedOwnProfile(address: string): Promise<void> {
     // best-effort
   }
 }
+
+/**
+ * The OwnerCap the app should treat as "my profile" for an address. Set when we
+ * (re)create a profile, so a freshly-minted correct profile supersedes any older
+ * broken one that `getOwnedObjects` might still return first.
+ */
+const activeCapKey = (address: string) => `pingou.activecap.${address}`;
+
+export async function getActiveCap(address: string): Promise<string | null> {
+  try {
+    return await AsyncStorage.getItem(activeCapKey(address));
+  } catch {
+    return null;
+  }
+}
+
+export async function setActiveCap(address: string, capId: string): Promise<void> {
+  try {
+    await AsyncStorage.setItem(activeCapKey(address), capId);
+  } catch {
+    // best-effort
+  }
+}
