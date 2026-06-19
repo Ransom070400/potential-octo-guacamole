@@ -88,6 +88,22 @@ const server = createServer(async (req, res) => {
       return send(res, 200, { ok: true, network: NETWORK });
     }
 
+    // Apple Sign In redirect target: Apple only redirects to a registered HTTPS URL,
+    // so we serve a page that bounces the #fragment (id_token) into the app scheme.
+    if (req.method === 'GET' && req.url.startsWith('/apple-callback')) {
+      res.writeHead(200, { 'Content-Type': 'text/html' });
+      return res.end(
+        `<!doctype html><meta charset="utf-8"><title>Pingou</title>` +
+          `<script>location.replace('pingou://auth-callback'+(location.hash||''))</script>` +
+          `Returning to Pingou…`
+      );
+    }
+    // Apple domain verification file (paste Apple's content into APPLE_DOMAIN_ASSOCIATION).
+    if (req.method === 'GET' && req.url === '/.well-known/apple-developer-domain-association.txt') {
+      res.writeHead(200, { 'Content-Type': 'text/plain' });
+      return res.end(process.env.APPLE_DOMAIN_ASSOCIATION ?? '');
+    }
+
     // Everything below spends gas — gate it.
     if (req.method === 'POST' && (req.url === '/sponsor' || req.url === '/execute')) {
       if (!authorized(req)) return send(res, 401, { error: 'unauthorized' });
@@ -122,7 +138,11 @@ const server = createServer(async (req, res) => {
     send(res, 404, { error: 'not found' });
   } catch (err) {
     console.error(err);
-    send(res, 500, { error: String(err?.message ?? err) });
+    // Surface Enoki's specific complaint (e.g. disallowed target, gas, bad object)
+    // instead of the opaque "Request to Enoki API failed (status: 400)".
+    const detail =
+      err?.errors?.[0]?.message || err?.cause?.message || err?.code || String(err?.message ?? err);
+    send(res, 500, { error: detail });
   }
 });
 

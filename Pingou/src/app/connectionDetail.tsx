@@ -24,6 +24,7 @@ import type { PingouProfileData } from '~/src/lib/sui/profileStore';
 import { ProfileType } from '~/src/types/ProfileTypes';
 import { buildSocialLinks } from '~/src/utils/buildSocialLinks';
 import { getPlatformById } from '~/src/config/socialPlatforms';
+import { colorFromAddress } from '~/src/utils/avatarColor';
 import { Feedback } from '~/src/utils/Feedback';
 
 export default function ConnectionDetail() {
@@ -130,6 +131,15 @@ function SuiConnectionDetail() {
             className="h-11 items-center justify-center rounded-full bg-black px-6 dark:bg-white">
             <Text className="font-semibold text-white dark:text-black">Check again</Text>
           </TouchableOpacity>
+
+          {/* Let them clean it up even if the other person removed them / hasn't shared. */}
+          {peerAddress ? (
+            <TouchableOpacity onPress={handleRemove} disabled={removing} className="mt-6">
+              <Text className="text-sm font-medium text-red-500">
+                {removing ? 'Removing…' : 'Remove connection'}
+              </Text>
+            </TouchableOpacity>
+          ) : null}
         </View>
       </View>
     );
@@ -140,11 +150,13 @@ function SuiConnectionDetail() {
       {Header}
       <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + 40 }} showsVerticalScrollIndicator={false}>
         <View className="items-center pt-6">
-          <View className="h-28 w-28 items-center justify-center overflow-hidden rounded-full border-4 border-white bg-neutral-200 shadow-lg dark:border-neutral-700">
+          <View
+            className="h-28 w-28 items-center justify-center overflow-hidden rounded-full border-4 border-white bg-neutral-200 shadow-lg dark:border-neutral-700"
+            style={!profile.avatar && peerAddress ? { backgroundColor: colorFromAddress(peerAddress) } : undefined}>
             {profile.avatar ? (
               <Image source={{ uri: profile.avatar }} className="h-full w-full" resizeMode="cover" />
             ) : (
-              <Text className="text-3xl font-bold text-neutral-500">{getInitials(profile.fullname)}</Text>
+              <Text className="text-3xl font-bold text-white">{getInitials(profile.fullname)}</Text>
             )}
           </View>
           <Text className="mt-4 text-2xl font-bold text-black dark:text-white">{profile.fullname}</Text>

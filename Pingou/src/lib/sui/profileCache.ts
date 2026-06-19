@@ -52,3 +52,30 @@ export async function setCachedProfile(blobId: string, data: PingouProfileData):
     // best-effort
   }
 }
+
+/**
+ * The user's OWN profile cached by ADDRESS (ref + decrypted data), so it can render
+ * instantly the moment they sign in — before any RPC. Refreshed in the background.
+ */
+export interface CachedOwnProfile {
+  ref: { profileObjectId: string; ownerCapId: string };
+  data: PingouProfileData;
+}
+const ownKey = (address: string) => `pingou.own.${address}`;
+
+export async function getCachedOwnProfile(address: string): Promise<CachedOwnProfile | null> {
+  try {
+    const raw = await AsyncStorage.getItem(ownKey(address));
+    return raw ? (JSON.parse(raw) as CachedOwnProfile) : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function setCachedOwnProfile(address: string, value: CachedOwnProfile): Promise<void> {
+  try {
+    await AsyncStorage.setItem(ownKey(address), JSON.stringify(value));
+  } catch {
+    // best-effort
+  }
+}

@@ -1,3 +1,4 @@
+
 # Pingou → Sui Migration Plan
 
 > ## 🔒 BUILD STATUS (2026-06-10) — scope narrowed & decisions locked

@@ -15,7 +15,9 @@ import {
 import { Mail, Lock } from 'lucide-react-native';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import { router } from 'expo-router';
-import Animated, { FadeIn, FadeOut, LinearTransition } from 'react-native-reanimated';
+import Animated, { FadeIn, FadeInDown, FadeOut, LinearTransition } from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { GoogleButton, AppleButton } from '~/src/components/AuthButtons';
 import {
   handleLoginUtil,
   handleLoginWithAppleAuthUtil,
@@ -24,40 +26,72 @@ import {
 import { handleUserSignUp } from '~/src/utils/signUpUtils';
 import SocialAuthButton from '~/src/components/SocialAuthButton';
 import { Feedback } from '~/src/utils/Feedback';
-import { SUI_ENABLED } from '~/src/lib/sui/config';
-import { useSuiAuth } from '~/src/context/SuiAuthProvider';
+import { SUI_ENABLED, APPLE_SERVICES_ID } from '~/src/lib/sui/config';
+import { useSuiAuth, type AuthProviderId } from '~/src/context/SuiAuthProvider';
 
 type Tab = 'signin' | 'signup';
 
-/** zkLogin sign-in (Sui mode): one tap -> Google -> Sui address. */
+/** zkLogin sign-in (Sui mode): one tap -> Google/Apple -> Sui address. */
 function SuiSignInScreen() {
   const { login, busy } = useSuiAuth();
+  const insets = useSafeAreaInsets();
+  const [pending, setPending] = useState<AuthProviderId | null>(null);
 
-  const onPress = async () => {
+  const onPress = async (provider: AuthProviderId) => {
+    setPending(provider);
     try {
       Feedback.medium();
-      await login(); // _layout's address guard switches to (tabs) on success
+      await login(provider); // _layout's address guard switches to (tabs) on success
     } catch (e: any) {
-      if (e?.message && e.message !== 'Google sign-in was cancelled') {
+      if (e?.message && !/cancel/i.test(e.message)) {
         Alert.alert('Sign-in failed', e.message);
       }
+    } finally {
+      setPending(null);
     }
   };
 
   return (
-    <View className="flex-1 items-center justify-center bg-neutral-100 dark:bg-neutral-900 px-8">
-      <Image source={require('../../../assets/PingouLogoWOBG.png')} className="w-[90px] h-[120px] mb-6" />
-      <Text className="text-2xl font-bold text-neutral-900 dark:text-white mb-2">Welcome to Pingou</Text>
-      <Text className="text-sm text-neutral-500 dark:text-neutral-400 mb-10 text-center">
-        Sign in with Google to create your seedless Sui account. No wallet, no gas, no passwords.
-      </Text>
-      {/* flex-row so SocialAuthButton's `flex-1` fills width (it collapses in a column). */}
-      <View className="w-full flex-row">
-        <SocialAuthButton
-          label={busy ? 'Signing in…' : 'Continue with Google'}
-          onPress={onPress}
-          disabled={busy}
-        />
+    <View className="flex-1 bg-neutral-50 dark:bg-neutral-950">
+      {/* Faint, tilted brand penguin in the corner. */}
+      <Image
+        source={require('../../../assets/PingouLogoWOBG.png')}
+        className="absolute -right-24 -top-12 h-[360px] w-[360px]"
+        style={{ opacity: 0.06, transform: [{ rotate: '18deg' }] }}
+        resizeMode="contain"
+      />
+
+      <View
+        className="flex-1 justify-between px-7"
+        style={{ paddingTop: insets.top + 36, paddingBottom: insets.bottom + 28 }}>
+        {/* Hero */}
+        <Animated.View entering={FadeIn.duration(500)} className="mt-14 items-center">
+          <Image
+            source={require('../../../assets/PingouLogoWOBG.png')}
+            className="h-[150px] w-[120px]"
+            resizeMode="contain"
+          />
+          <Text className="mt-4 text-3xl font-bold text-neutral-900 dark:text-white">
+            Welcome to Pingou
+          </Text>
+          <Text className="mt-3 px-3 text-center text-base leading-6 text-neutral-500 dark:text-neutral-400">
+            Your contact card — encrypted and truly yours. Sign in for a seedless account:
+            no wallet, no gas, no passwords.
+          </Text>
+        </Animated.View>
+
+        {/* Actions */}
+        <Animated.View entering={FadeInDown.delay(150).duration(500)} className="w-full">
+          <GoogleButton onPress={() => onPress('google')} loading={pending === 'google'} disabled={busy} />
+          {APPLE_SERVICES_ID ? (
+            <View className="mt-3">
+              <AppleButton onPress={() => onPress('apple')} loading={pending === 'apple'} disabled={busy} />
+            </View>
+          ) : null}
+          <Text className="mt-6 text-center text-xs text-neutral-400 dark:text-neutral-500">
+            Your card stays private until you choose to share it.
+          </Text>
+        </Animated.View>
       </View>
     </View>
   );

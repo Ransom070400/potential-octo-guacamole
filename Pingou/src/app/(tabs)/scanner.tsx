@@ -58,7 +58,7 @@ const Scanner = () => {
     setSuccess({ loading: true });
     try {
       const data = await exchange(address, signer, profileRef, peer);
-      Feedback.success();
+      Feedback.ping(); // signature chime + haptic on a successful connection
       markAnnounced(peer.address); // so my own home poll doesn't re-pop this
       // Instantly notify the scanned device so it pops the checkmark too.
       notifyConnection(peer.address, {
@@ -71,6 +71,7 @@ const Scanner = () => {
         loading: false,
         name: data.fullname,
         avatarUrl: data.avatar ?? null,
+        address: peer.address,
         onViewProfile: () =>
           router.push({
             pathname: '/connectionDetail',

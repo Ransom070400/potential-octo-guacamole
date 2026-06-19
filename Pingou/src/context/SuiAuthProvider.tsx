@@ -7,7 +7,9 @@
  */
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { Alert } from 'react-native';
-import { loginWithGoogle, restoreSession, logout as zkLogout, type ZkLoginSigner } from '../lib/sui/zkLogin';
+import { loginWithGoogle, loginWithApple, restoreSession, logout as zkLogout, type ZkLoginSigner } from '../lib/sui/zkLogin';
+
+export type AuthProviderId = 'google' | 'apple';
 import { clearProfileSession } from '../lib/sui/seal';
 import { connectRealtime, disconnectRealtime } from '../lib/sui/realtime';
 import {
@@ -15,6 +17,7 @@ import {
   saveOwnProfile,
   type OwnedProfileRef,
 } from '../lib/sui/profileService';
+import { getCachedOwnProfile } from '../lib/sui/profileCache';
 import type { PingouProfileData } from '../lib/sui/profileStore';
 
 interface SuiAuthValue {
@@ -28,7 +31,7 @@ interface SuiAuthValue {
   loading: boolean;
   /** True while a profile read/write is in flight. */
   busy: boolean;
-  login: () => Promise<void>;
+  login: (provider?: AuthProviderId) => Promise<void>;
   logout: () => Promise<void>;
   saveProfile: (data: PingouProfileData) => Promise<void>;
   refresh: () => Promise<void>;
@@ -45,24 +48,42 @@ export const SuiAuthProvider = ({ children }: { children: React.ReactNode }) => 
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
 
-  const loadProfileFor = useCallback(async (addr: string, s: ZkLoginSigner) => {
-    try {
-      const res = await loadOwnProfile(addr, s);
-      if (res) {
-        setProfileRef(res.ref);
-        setProfile(res.data);
-      } else {
-        setProfileRef(null);
-        setProfile(null);
+  const loadProfileFor = useCallback(
+    async (addr: string, s: ZkLoginSigner, opts?: { keepOnEmpty?: boolean }) => {
+      try {
+        const res = await loadOwnProfile(addr, s);
+        if (res) {
+          setProfileRef(res.ref);
+          setProfile(res.data);
+        } else if (!opts?.keepOnEmpty) {
+          setProfileRef(null);
+          setProfile(null);
+        }
+      } catch (err) {
+        console.warn('Failed to load Sui profile:', err);
       }
-    } catch (err) {
-      console.warn('Failed to load Sui profile:', err);
-    }
-  }, []);
+    },
+    []
+  );
+
+  // Render the cached profile instantly (by address), then refresh from chain in the
+  // background — so an existing user sees their card the moment they sign in.
+  const hydrate = useCallback(
+    async (addr: string, s: ZkLoginSigner) => {
+      const cached = await getCachedOwnProfile(addr);
+      if (cached) {
+        setProfileRef(cached.ref);
+        setProfile(cached.data);
+      }
+      loadProfileFor(addr, s, { keepOnEmpty: !!cached }); // non-blocking refresh
+    },
+    [loadProfileFor]
+  );
 
   // Restore an existing session on launch.
   useEffect(() => {
     let mounted = true;
+    const start = Date.now();
     (async () => {
       try {
         const session = await restoreSession();
@@ -71,29 +92,33 @@ export const SuiAuthProvider = ({ children }: { children: React.ReactNode }) => 
           setAddress(session.address);
           setSigner(session.signer);
           connectRealtime(session.address);
-          await loadProfileFor(session.address, session.signer);
+          await hydrate(session.address, session.signer);
         }
       } finally {
+        // Keep the brand splash up for a minimum beat so it reads intentionally,
+        // not as a flicker.
+        const wait = 850 - (Date.now() - start);
+        if (wait > 0) await new Promise((r) => setTimeout(r, wait));
         if (mounted) setLoading(false);
       }
     })();
     return () => {
       mounted = false;
     };
-  }, [loadProfileFor]);
+  }, [hydrate]);
 
-  const login = useCallback(async () => {
+  const login = useCallback(async (provider: AuthProviderId = 'google') => {
     setBusy(true);
     try {
-      const session = await loginWithGoogle();
+      const session = await (provider === 'apple' ? loginWithApple() : loginWithGoogle());
       setAddress(session.address);
       setSigner(session.signer);
       connectRealtime(session.address);
-      await loadProfileFor(session.address, session.signer);
+      await hydrate(session.address, session.signer);
     } finally {
       setBusy(false);
     }
-  }, [loadProfileFor]);
+  }, [hydrate]);
 
   const logout = useCallback(async () => {
     clearProfileSession();

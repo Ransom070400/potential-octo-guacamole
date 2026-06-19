@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { View, ScrollView, TouchableOpacity, useColorScheme, Alert, RefreshControl, Share, Text } from 'react-native';
+import { View, ScrollView, TouchableOpacity, useColorScheme, Alert, RefreshControl, Share, Text, Image } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LogOut, Share2, Trash2 } from 'lucide-react-native';
 import { useFocusEffect } from '@react-navigation/native';
@@ -203,11 +203,12 @@ const SuiHome: React.FC = () => {
     const unsub = onConnection((c) => {
       knownAddrs.current?.add(c.from);
       markAnnounced(c.from);
-      Feedback.success();
+      Feedback.ping();
       setIncoming({
         loading: false,
         name: c.name ?? 'New connection',
         avatarUrl: c.avatar ?? null,
+        address: c.from,
         onViewProfile: c.profileId
           ? () =>
               router.push({
@@ -241,11 +242,12 @@ const SuiHome: React.FC = () => {
             try {
               const card = await loadConnectionCard(address, signer, c.profileObjectId);
               if (!active) return;
-              Feedback.success();
+              Feedback.ping();
               setIncoming({
                 loading: false,
                 name: card.fullname ?? 'New connection',
                 avatarUrl: card.avatar ?? null,
+                address: c.address,
                 onViewProfile: () =>
                   router.push({
                     pathname: '/connectionDetail',
@@ -287,30 +289,46 @@ const SuiHome: React.FC = () => {
     ]);
   };
 
+  const handleShare = async () => {
+    if (!qrValue || !profile) return;
+    Feedback.light();
+    try {
+      await Share.share({ message: `Connect with ${profile.fullname} on Pingou:\n${qrValue}` });
+    } catch {}
+  };
+
   // Show the skeleton whenever a profile load is in flight and we don't have one
   // yet — otherwise the post-login load (RPC + Walrus + Seal) would briefly flash
   // the "Create profile" screen even when a profile exists.
   if ((loading || busy) && !profile) return <ProfileSkeleton />;
 
-  // Signed in, load finished, genuinely no profile yet — prompt setup.
+  // Signed in, load finished, genuinely no profile yet — welcoming setup screen.
   if (!profile) {
     return (
       <View className="flex-1 items-center justify-center bg-neutral-100 px-8 dark:bg-neutral-900">
-        <Text className="mb-2 text-xl font-bold text-neutral-900 dark:text-white">
-          Set up your profile
+        <Image
+          source={require('../../../assets/PingouLogoWOBG.png')}
+          className="mb-2 h-[150px] w-[120px]"
+          resizeMode="contain"
+        />
+        <Text className="mb-2 text-2xl font-bold text-neutral-900 dark:text-white">
+          Welcome to Pingou
         </Text>
-        <Text className="mb-8 text-center text-sm text-neutral-500 dark:text-neutral-400">
-          Your profile is encrypted with Seal and stored on Walrus — only people you
-          connect with can read it.
+        <Text className="mb-9 text-center text-sm leading-5 text-neutral-500 dark:text-neutral-400">
+          Let's set up your card — add your name, photo, and socials. It stays private
+          until you choose to share it.
         </Text>
         <TouchableOpacity
-          onPress={() => router.push('/editProfile')}
-          className="h-12 items-center justify-center rounded-full bg-black px-8 dark:bg-white">
-          <Text className="font-semibold text-white dark:text-black">Create profile</Text>
+          onPress={() => {
+            Feedback.medium();
+            router.push('/editProfile');
+          }}
+          className="w-full flex-row items-center justify-center rounded-full bg-black py-4 dark:bg-white">
+          <Text className="text-base font-semibold text-white dark:text-black">Set up my card</Text>
         </TouchableOpacity>
-        <Text className="mt-10 text-xs text-neutral-400" onPress={handleLogout}>
-          Log out
-        </Text>
+        <TouchableOpacity onPress={handleLogout} className="mt-8">
+          <Text className="text-xs text-neutral-400">Log out</Text>
+        </TouchableOpacity>
       </View>
     );
   }
@@ -348,6 +366,15 @@ const SuiHome: React.FC = () => {
         <View className="mt-8">
           <ProfileQRCode userId={qrValue} />
         </View>
+        <TouchableOpacity
+          onPress={handleShare}
+          activeOpacity={0.7}
+          className="mx-auto mt-5 flex-row items-center rounded-full bg-neutral-200 px-5 py-2.5 dark:bg-neutral-800">
+          <Share2 size={16} color={iconColor} />
+          <Text className="ml-2 text-sm font-semibold" style={{ color: iconColor }}>
+            Share my card
+          </Text>
+        </TouchableOpacity>
 
         <View className="mt-6">
           <ContactInfo email={profile.email} phone={profile.phone} />

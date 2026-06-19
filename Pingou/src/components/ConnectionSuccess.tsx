@@ -2,12 +2,14 @@ import React, { useEffect } from 'react';
 import { View, Text, Modal, Image, Pressable, ActivityIndicator } from 'react-native';
 import Animated, { ZoomIn, FadeIn, FadeOut } from 'react-native-reanimated';
 import { Check } from 'lucide-react-native';
+import { colorFromAddress } from '~/src/utils/avatarColor';
 
 export interface ConnectionSuccessData {
   /** While true, show a spinner ("Connecting…"); the exchange is still in flight. */
   loading?: boolean;
   name?: string;
   avatarUrl?: string | null;
+  address?: string;
   onViewProfile?: () => void;
 }
 
@@ -71,11 +73,13 @@ export default function ConnectionSuccess({
               <Text className="text-xl font-bold text-neutral-900 dark:text-white">Connected!</Text>
 
               <View className="mt-4 flex-row items-center">
-                <View className="h-9 w-9 items-center justify-center overflow-hidden rounded-full bg-neutral-200 dark:bg-neutral-700">
+                <View
+                  className="h-9 w-9 items-center justify-center overflow-hidden rounded-full bg-neutral-200 dark:bg-neutral-700"
+                  style={!data.avatarUrl && data.address ? { backgroundColor: colorFromAddress(data.address) } : undefined}>
                   {data.avatarUrl ? (
                     <Image source={{ uri: data.avatarUrl }} className="h-full w-full" resizeMode="cover" />
                   ) : (
-                    <Text className="text-xs font-bold text-neutral-600 dark:text-neutral-300">{initials}</Text>
+                    <Text className="text-xs font-bold text-white">{initials}</Text>
                   )}
                 </View>
                 <Text className="ml-2 text-base font-medium text-neutral-700 dark:text-neutral-200" numberOfLines={1}>

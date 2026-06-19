@@ -41,6 +41,13 @@ export const GOOGLE_CLIENT_ID = env.EXPO_PUBLIC_GOOGLE_CLIENT_ID ?? '';
 export const OAUTH_REDIRECT_SCHEME = 'pingou';
 export const OAUTH_REDIRECT_PATH = 'auth-callback';
 
+// ── Apple (zkLogin via web flow; native Apple sign-in is incompatible) ──
+/** Apple Services ID (e.g. com.anonymous.pingou.signin). Register THIS in Enoki. */
+export const APPLE_SERVICES_ID = env.EXPO_PUBLIC_APPLE_SERVICES_ID ?? '';
+/** HTTPS return URL registered with Apple — a page that bounces the fragment into
+ *  `pingou://auth-callback`. Apple forbids custom-scheme / localhost redirects. */
+export const APPLE_REDIRECT_URI = env.EXPO_PUBLIC_APPLE_REDIRECT_URI ?? '';
+
 // ── Walrus (HTTP; SDK can't run on Hermes) ──────────────────────
 export const WALRUS_PUBLISHER =
   env.EXPO_PUBLIC_WALRUS_PUBLISHER ?? 'https://publisher.walrus-testnet.walrus.space';

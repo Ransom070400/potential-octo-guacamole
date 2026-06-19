@@ -9,6 +9,7 @@ import { useAuth } from '~/src/context/AuthProvider';
 import { useSuiAuth } from '~/src/context/SuiAuthProvider';
 import { SUI_ENABLED } from '~/src/lib/sui/config';
 import { getMyConnections, loadConnectionCard, type Connection } from '~/src/lib/sui/profileService';
+import { colorFromAddress } from '~/src/utils/avatarColor';
 import { ProfileType } from '~/src/types/ProfileTypes';
 import { Feedback } from '~/src/utils/Feedback';
 import { useSearchQuery } from './_layout';
@@ -126,13 +127,13 @@ const SuiConnections = () => {
               })
             }
             activeOpacity={0.7}>
-            <View className="h-12 w-12 items-center justify-center overflow-hidden rounded-full bg-neutral-200 dark:bg-neutral-700">
+            <View
+              className="h-12 w-12 items-center justify-center overflow-hidden rounded-full bg-neutral-200 dark:bg-neutral-700"
+              style={!item.avatar ? { backgroundColor: colorFromAddress(item.address) } : undefined}>
               {item.avatar ? (
                 <Image source={{ uri: item.avatar }} className="h-full w-full" resizeMode="cover" />
               ) : (
-                <Text className="text-sm font-bold text-neutral-600 dark:text-neutral-300">
-                  {initial(item)}
-                </Text>
+                <Text className="text-sm font-bold text-white">{initial(item)}</Text>
               )}
             </View>
             <View className="ml-3 flex-1">

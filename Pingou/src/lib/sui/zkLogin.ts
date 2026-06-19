@@ -21,7 +21,7 @@ import {
   createZkLoginProof,
   type ZkLoginProof,
 } from './enoki';
-import { signInWithGoogle } from './oauth';
+import { signInWithGoogle, signInWithApple } from './oauth';
 
 const SECRET_KEY = 'pingou.zklogin.ephemeralSecret';
 const PUBLIC_KEY = 'pingou.zklogin.session';
@@ -95,12 +95,12 @@ interface StoredPublic {
   expiresAtMs: number;
 }
 
-/** Full interactive login: returns the user's Sui address + a ready-to-use signer. */
-export async function loginWithGoogle(): Promise<ZkLoginSession> {
+/** Run the full zkLogin flow with a provider's sign-in (returns the OIDC JWT). */
+async function loginWith(signIn: (nonce: string) => Promise<string>): Promise<ZkLoginSession> {
   const ephemeral = Ed25519Keypair.generate();
 
   const nonce = await createZkLoginNonce(ephemeral.getPublicKey());
-  const jwt = await signInWithGoogle(nonce.nonce);
+  const jwt = await signIn(nonce.nonce);
   const { address } = await getZkLogin(jwt);
   const proof = await createZkLoginProof({
     jwt,
@@ -118,6 +118,10 @@ export async function loginWithGoogle(): Promise<ZkLoginSession> {
 
   return { address, signer: new ZkLoginSigner({ proof, maxEpoch: nonce.maxEpoch, ephemeral, address }) };
 }
+
+/** Full interactive login: returns the user's Sui address + a ready-to-use signer. */
+export const loginWithGoogle = () => loginWith(signInWithGoogle);
+export const loginWithApple = () => loginWith(signInWithApple);
 
 /** Rebuild a session from storage if one exists and hasn't expired. */
 export async function restoreSession(): Promise<ZkLoginSession | null> {

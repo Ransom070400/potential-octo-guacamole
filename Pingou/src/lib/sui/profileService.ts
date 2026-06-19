@@ -24,6 +24,7 @@ import {
   setCachedCard,
   getCachedProfile,
   setCachedProfile,
+  setCachedOwnProfile,
   type CachedCard,
 } from './profileCache';
 import { generateShareCode, shareCodeBytes, type ConnectPayload } from './share';
@@ -75,6 +76,7 @@ export async function saveOwnProfile(
   const full = { ...data, shareCode };
   const { blobId } = await saveProfile(ref.profileObjectId, full);
   await setCachedProfile(blobId, full); // so the reload after save is instant
+  await setCachedOwnProfile(address, { ref, data: full }); // instant on next sign-in
   await sponsorAndExecute(
     buildSetBlobTx(ref.profileObjectId, ref.ownerCapId, blobId),
     signer,
@@ -94,16 +96,18 @@ export async function loadOwnProfile(
   if (!onchain?.blobId) return null;
   // Cache-first: own profile is keyed by the immutable blob id, so once decrypted
   // it loads instantly on next launch (no Walrus/Seal) until the profile changes.
-  const cached = await getCachedProfile(onchain.blobId);
-  if (cached) return { ref, data: cached };
-  const data = await loadProfile({
-    profileObjectId: ref.profileObjectId,
-    blobId: onchain.blobId,
-    sealId: makeProfileSealId(ref.profileObjectId),
-    address,
-    signer,
-  });
-  await setCachedProfile(onchain.blobId, data);
+  let data = await getCachedProfile(onchain.blobId);
+  if (!data) {
+    data = await loadProfile({
+      profileObjectId: ref.profileObjectId,
+      blobId: onchain.blobId,
+      sealId: makeProfileSealId(ref.profileObjectId),
+      address,
+      signer,
+    });
+    await setCachedProfile(onchain.blobId, data);
+  }
+  await setCachedOwnProfile(address, { ref, data }); // for instant render next sign-in
   return { ref, data };
 }
 
