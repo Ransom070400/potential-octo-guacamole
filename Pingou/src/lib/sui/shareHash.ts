@@ -1,15 +1,15 @@
 /**
- * Share-code hashing, isolated from share.ts because it pulls expo-crypto (which
- * drags in react-native and so can't be imported under Node for the headless smoke
- * tests). profileService lazy-imports this only on the profile-create path.
+ * Share-code hashing. This MUST produce exactly Move's `hash::sha2_256(utf8(code))`,
+ * because `add_self` asserts `sha2_256(code) == share_hash` (aborts EBadShareCode
+ * otherwise). We use @noble/hashes (pure JS, Hermes-safe, the same lib Seal uses)
+ * instead of expo-crypto, whose base64-digest path did NOT round-trip to the same
+ * bytes — so the committed share_hash was wrong and every exchange aborted with
+ * EBadShareCode.
  */
-import * as Crypto from 'expo-crypto';
-import { fromBase64 } from '@mysten/sui/utils';
+import { sha256 } from '@noble/hashes/sha2.js';
+import { shareCodeBytes } from './share';
 
 /** sha256(utf8(code)) as bytes — matches Move's `hash::sha2_256(code)`. */
-export async function shareCodeHash(code: string): Promise<Uint8Array> {
-  const b64 = await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, code, {
-    encoding: Crypto.CryptoEncoding.BASE64,
-  });
-  return fromBase64(b64);
+export function shareCodeHash(code: string): Uint8Array {
+  return sha256(shareCodeBytes(code));
 }
