@@ -17,7 +17,7 @@ import {
   saveOwnProfile,
   type OwnedProfileRef,
 } from '../lib/sui/profileService';
-import { getCachedOwnProfile } from '../lib/sui/profileCache';
+import { getCachedOwnProfile, clearCachedOwnProfile } from '../lib/sui/profileCache';
 import type { PingouProfileData } from '../lib/sui/profileStore';
 
 interface SuiAuthValue {
@@ -49,17 +49,24 @@ export const SuiAuthProvider = ({ children }: { children: React.ReactNode }) => 
   const [busy, setBusy] = useState(false);
 
   const loadProfileFor = useCallback(
-    async (addr: string, s: ZkLoginSigner, opts?: { keepOnEmpty?: boolean }) => {
+    async (addr: string, s: ZkLoginSigner) => {
       try {
         const res = await loadOwnProfile(addr, s);
         if (res) {
           setProfileRef(res.ref);
           setProfile(res.data);
-        } else if (!opts?.keepOnEmpty) {
+        } else {
+          // Confirmed: no profile for this address on the CURRENT package (the
+          // lookup succeeded — RPC errors throw and are caught below). Drop any
+          // stale cached profile (e.g. left over from a previous package) so the
+          // user is shown "set up your card" instead of a dead profile whose id
+          // would fail every exchange with a TypeMismatch.
           setProfileRef(null);
           setProfile(null);
+          await clearCachedOwnProfile(addr);
         }
       } catch (err) {
+        // Transient (e.g. network) — keep showing whatever we have and retry later.
         console.warn('Failed to load Sui profile:', err);
       }
     },
@@ -75,7 +82,7 @@ export const SuiAuthProvider = ({ children }: { children: React.ReactNode }) => 
         setProfileRef(cached.ref);
         setProfile(cached.data);
       }
-      loadProfileFor(addr, s, { keepOnEmpty: !!cached }); // non-blocking refresh
+      loadProfileFor(addr, s); // non-blocking refresh; clears a confirmed-gone profile
     },
     [loadProfileFor]
   );

@@ -79,3 +79,12 @@ export async function setCachedOwnProfile(address: string, value: CachedOwnProfi
     // best-effort
   }
 }
+
+/** Drop the cached own profile (e.g. it no longer exists on the current package). */
+export async function clearCachedOwnProfile(address: string): Promise<void> {
+  try {
+    await AsyncStorage.removeItem(ownKey(address));
+  } catch {
+    // best-effort
+  }
+}
