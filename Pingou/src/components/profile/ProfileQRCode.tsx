@@ -1,68 +1,65 @@
-import React, { useMemo } from 'react'
-// import RN primitives
-import { View, Text } from 'react-native'
-// render the QR image
-import QRCode from 'react-native-qrcode-svg'
+import React, { useMemo } from 'react';
+import { View, Text } from 'react-native';
+import QRCode from 'react-native-qrcode-svg';
+
+const PENGUIN = require('../../../assets/PingouLogoWOBG.png');
 
 interface ProfileQRCodeProps {
-  // The unique user id we encode
-  userId: string
-  // Optional explicit value override (lets you pass a deep link later)
-  valueOverride?: string
-  // Optional size so parent can control dimensions (defaults sensible)
-  size?: number
+  /** The value we encode (address / connect link). */
+  userId: string;
+  /** Optional explicit value override (e.g. a deep link). */
+  valueOverride?: string;
+  /** QR size in px. */
+  size?: number;
 }
 
-const ProfileQRCode: React.FC<ProfileQRCodeProps> = ({
-  userId,
-  valueOverride,
-  size = 200
-}) => {
-  // Build the value ONCE per userId/valueOverride change.
-  // const qrValue = useMemo(
-  //   () => valueOverride ?? `pingou:user:${userId}`,
-  //   [userId, valueOverride]
-  // )
+/**
+ * Branded QR card: a clean white panel with the Pingou penguin knocked out of the
+ * centre. Error correction is forced to H (~30% recoverable) so the centre logo
+ * never hurts scan reliability.
+ */
+const ProfileQRCode: React.FC<ProfileQRCodeProps> = ({ userId, valueOverride, size = 224 }) => {
+  const value = useMemo(() => valueOverride ?? userId, [userId, valueOverride]);
 
   return (
-    // Card container: rounded, padded, and theme-aware background
-    <View className="bg-white dark:bg-neutral-900 rounded-2xl p-6 mx-4 shadow-sm">
-      {/* Title */}
-      <Text className="text-2xl font-semibold text-neutral-900 dark:text-neutral-100 text-left">
+    <View className="mx-4 rounded-3xl bg-white p-6 shadow-sm dark:bg-neutral-900">
+      <Text className="text-2xl font-semibold text-neutral-900 dark:text-neutral-100">
         Your QR Code
       </Text>
-
-      {/* Subtitle */}
-      <Text className="mt-1 text-lg text-black dark:text-neutral-400 text-left">
+      <Text className="mt-1 text-base text-neutral-500 dark:text-neutral-400">
         Scan to connect
       </Text>
 
-      {/* Center the QR block */}
       <View className="mt-6 items-center">
-        {/* Grey rounded background wrapper (like your screenshot) */}
-        <View className="bg-neutral-100 dark:bg-neutral-800 rounded-3xl p-10 shadow-sm">
-          {/* Exact-fit white square so its corners align 1:1 with the QR */}
-          <View
-            // Width/height must match the QR size exactly (no +1, no padding)
-            style={{ width: size, height: size }}
-            // White surface improves scan reliability; clip to remove any bleed
-            className="bg-white overflow-hidden rounded-none"
-          >
-            <QRCode
-              // The encoded value
-              value={userId}
-              // Fill the white square exactly
-              size={size}
-              // Transparent so the white square shows through
-              backgroundColor="transparent"
-              // Black modules on white are most scannable in both light/dark modes
-              color="#000000"
-            />
-          </View>
+        {/* White panel — keeps modules on pure white for max scannability */}
+        <View
+          className="rounded-3xl bg-white p-5"
+          style={{
+            shadowColor: '#000',
+            shadowOpacity: 0.08,
+            shadowRadius: 16,
+            shadowOffset: { width: 0, height: 6 },
+            elevation: 3,
+            borderWidth: 1,
+            borderColor: 'rgba(0,0,0,0.05)',
+          }}>
+          <QRCode
+            value={value}
+            size={size}
+            ecl="H"
+            color="#0B0B0F"
+            backgroundColor="#FFFFFF"
+            quietZone={6}
+            logo={PENGUIN}
+            logoSize={size * 0.22}
+            logoBackgroundColor="#FFFFFF"
+            logoMargin={5}
+            logoBorderRadius={14}
+          />
         </View>
       </View>
     </View>
-  )
-}
+  );
+};
 
-export default ProfileQRCode
+export default ProfileQRCode;
