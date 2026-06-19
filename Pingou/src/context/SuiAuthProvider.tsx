@@ -10,7 +10,7 @@ import { Alert } from 'react-native';
 import { loginWithGoogle, loginWithApple, restoreSession, logout as zkLogout, type ZkLoginSigner } from '../lib/sui/zkLogin';
 
 export type AuthProviderId = 'google' | 'apple';
-import { clearProfileSession } from '../lib/sui/seal';
+import { clearProfileSession, prewarmProfileSession } from '../lib/sui/seal';
 import { connectRealtime, disconnectRealtime } from '../lib/sui/realtime';
 import {
   loadOwnProfile,
@@ -119,6 +119,7 @@ export const SuiAuthProvider = ({ children }: { children: React.ReactNode }) => 
           setAddress(session.address);
           setSigner(session.signer);
           connectRealtime(session.address);
+          prewarmProfileSession(session.address, session.signer); // warm Seal for fast first decrypt
           await hydrate(session.address, session.signer);
         }
       } finally {
@@ -141,6 +142,7 @@ export const SuiAuthProvider = ({ children }: { children: React.ReactNode }) => 
       setAddress(session.address);
       setSigner(session.signer);
       connectRealtime(session.address);
+      prewarmProfileSession(session.address, session.signer); // warm Seal for fast first decrypt
       await hydrate(session.address, session.signer);
     } finally {
       setBusy(false);

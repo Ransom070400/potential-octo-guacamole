@@ -143,6 +143,18 @@ export function clearProfileSession(): void {
 }
 
 /**
+ * Warm the cached SessionKey ahead of the first decrypt (call right after sign-in),
+ * so a scan doesn't pay the create-and-sign cost on its critical path. Best-effort.
+ */
+export async function prewarmProfileSession(address: string, signer: Signer): Promise<void> {
+  try {
+    await getProfileSession(address, signer);
+  } catch {
+    // best-effort; the decrypt path will create one if this didn't land
+  }
+}
+
+/**
  * Decrypt using a cached-but-valid SessionKey, self-healing if it expires mid-flow
  * (recreate once and retry). This is the path callers should use.
  */

@@ -7,8 +7,9 @@
  *                       allow table (in a two-way scan each party lands in the
  *                       other's allow table).
  */
-import { makeProfileSealId } from './seal';
+import { makeProfileSealId, decryptForProfileFresh } from './seal';
 import { saveProfile, loadProfile, type PingouProfileData } from './profileStore';
+import { readBlob } from './walrus';
 import {
   buildCreateProfileTx,
   buildSetBlobTx,
@@ -171,6 +172,15 @@ export async function exchange(
   myRef: OwnedProfileRef,
   peer: ConnectPayload
 ): Promise<PingouProfileData> {
+  // The peer's ciphertext is public — start fetching it (and its blob id) WHILE the
+  // grant tx is in flight, so we only pay the slower of the two, not their sum.
+  const fetchP = (async () => {
+    const oc = await getProfile(peer.profileId);
+    if (!oc?.blobId) throw new Error('Peer has no profile set up yet');
+    return { blobId: oc.blobId, ciphertext: await readBlob(oc.blobId) };
+  })();
+  fetchP.catch(() => {}); // don't let an early reject surface as unhandled
+
   await sponsorAndExecute(
     buildExchangeTx({
       peerProfileId: peer.profileId,
@@ -182,7 +192,21 @@ export async function exchange(
     signer,
     myAddress
   );
-  return loadPeerProfile(myAddress, signer, peer.profileId);
+
+  const { blobId, ciphertext } = await fetchP;
+  // Decrypt now that the grant has landed (seal_approve sees us in the allow table).
+  const plaintext = await decryptForProfileFresh({
+    ciphertext,
+    profileObjectId: peer.profileId,
+    id: makeProfileSealId(peer.profileId),
+    address: myAddress,
+    signer,
+  });
+  const data = JSON.parse(new TextDecoder().decode(plaintext)) as PingouProfileData;
+  // Cache the card + profile so the connections list/detail open instantly later.
+  await setCachedProfile(blobId, data);
+  await setCachedCard(blobId, { fullname: data.fullname, avatar: data.avatar, bio: data.bio });
+  return data;
 }
 
 /**

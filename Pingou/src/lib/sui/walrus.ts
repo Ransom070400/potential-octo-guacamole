@@ -56,13 +56,21 @@ export async function storeBlob(
   throw new Error(`Walrus store: unexpected response shape: ${JSON.stringify(json)}`);
 }
 
-/** Read a blob back by id. Returns the raw bytes (Seal ciphertext, in our case). */
-export async function readBlob(blobId: string): Promise<Uint8Array> {
-  const res = await fetch(`${WALRUS_AGGREGATOR}/v1/blobs/${blobId}`);
-  if (!res.ok) {
-    throw new Error(`Walrus read failed: ${res.status} ${await safeText(res)}`);
+/** Read a blob back by id. Returns the raw bytes (Seal ciphertext, in our case).
+ *  Times out a stalled aggregator and retries once so a slow node can't hang a scan. */
+export async function readBlob(blobId: string, timeoutMs = 12_000): Promise<Uint8Array> {
+  const url = `${WALRUS_AGGREGATOR}/v1/blobs/${blobId}`;
+  let lastErr: unknown;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const res = await fetch(url, { signal: AbortSignal.timeout(timeoutMs) });
+      if (!res.ok) throw new Error(`Walrus read failed: ${res.status} ${await safeText(res)}`);
+      return new Uint8Array(await res.arrayBuffer());
+    } catch (e) {
+      lastErr = e;
+    }
   }
-  return new Uint8Array(await res.arrayBuffer());
+  throw lastErr instanceof Error ? lastErr : new Error('Walrus read failed');
 }
 
 /** Direct URL for a blob — handy for `<Image source={{ uri }}>` on non-encrypted blobs. */
