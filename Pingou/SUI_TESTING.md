@@ -8,7 +8,7 @@ How to verify the zkLogin + Walrus + Seal migration. Two layers:
 Everything is gated by `EXPO_PUBLIC_SUI_ENABLED`. With it `false`, the app is 100% the
 old Supabase build. Nothing below affects production until you flip it.
 
-Deployed testnet package: `0xd2b46e84434c141bc5d31e80e7c76376bf9c54e3c416bd84c39997d8c9b3c0ae`
+Deployed testnet package: `0xe9e00a0f790fd1ec16fa122cb85978e5667db20178e866e3c1b930c0e0d8960d`
 (module `profile`). Move source: `move/pingou/`.
 
 ---
@@ -49,7 +49,7 @@ need the deployer key, exported transiently. The reader in the exchange test nee
 KEY=$(sui keytool export --key-identity "$(sui client active-address)" --json \
   | sed -n 's/.*"exportedPrivateKey": *"\([^"]*\)".*/\1/p')
 
-PKG=0xd2b46e84434c141bc5d31e80e7c76376bf9c54e3c416bd84c39997d8c9b3c0ae
+PKG=0xe9e00a0f790fd1ec16fa122cb85978e5667db20178e866e3c1b930c0e0d8960d
 
 # (a) storage round-trip: Walrus + Seal encrypt -> store -> read -> decrypt (owner)
 #     PINGOU_PROFILE_ID = any Profile object you own (create one if needed, see below)

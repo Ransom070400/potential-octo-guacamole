@@ -15,7 +15,7 @@
 >
 > **Done:** ✅ `move/pingou` package (`profile.move` + `seal_approve` allowlist policy),
 > `sui move test` green (3/3). ✅ **Deployed to testnet** — package
-> `0xd2b46e84434c141bc5d31e80e7c76376bf9c54e3c416bd84c39997d8c9b3c0ae` (module
+> `0xe9e00a0f790fd1ec16fa122cb85978e5667db20178e866e3c1b930c0e0d8960d` (module
 > `profile`); verified live (`create_and_keep` → shared `Profile` + owner `OwnerCap`).
 > ✅ `.env.example`/`.env.local` Sui vars + `src/lib/sui/config.ts` (feature-flagged) +
 > deps installed + `crypto.getRandomValues` polyfill in `_layout.tsx`.

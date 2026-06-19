@@ -36,7 +36,7 @@ is the simplest free path.
 cd server
 fly launch --no-deploy            # generates fly.toml; uses the Dockerfile here
 fly secrets set ENOKI_PRIVATE_KEY=enoki_private_… \
-  PINGOU_PACKAGE_ID=0xd2b46e84434c141bc5d31e80e7c76376bf9c54e3c416bd84c39997d8c9b3c0ae \
+  PINGOU_PACKAGE_ID=0xe9e00a0f790fd1ec16fa122cb85978e5667db20178e866e3c1b930c0e0d8960d \
   SUI_NETWORK=testnet
 fly deploy
 ```
