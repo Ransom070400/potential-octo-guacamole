@@ -1,28 +1,26 @@
 import React, { useMemo } from 'react';
-import { View, Text, Dimensions } from 'react-native';
+import { View, Text } from 'react-native';
 import QRCode from 'react-native-qrcode-svg';
 
 const PENGUIN = require('../../../assets/PingouLogoWOBG.png');
-const SCREEN_W = Dimensions.get('window').width;
 
 interface ProfileQRCodeProps {
   /** The value we encode (address / connect link). */
   userId: string;
   /** Optional explicit value override (e.g. a deep link). */
   valueOverride?: string;
-  /** QR size in px. Defaults to a large, screen-responsive size. */
+  /** QR size in px. */
   size?: number;
 }
 
 /**
- * Branded QR hero: a big, screen-responsive code on a clean card with the Pingou
- * penguin knocked out of the centre. Error correction is forced to H (~30%
- * recoverable) so the centre logo never hurts scan reliability.
+ * Branded QR card: a clean code with the Pingou penguin knocked out of the centre.
+ * Error correction is forced to H (~30% recoverable) so the centre logo never hurts
+ * scan reliability.
  */
-const ProfileQRCode: React.FC<ProfileQRCodeProps> = ({ userId, valueOverride, size }) => {
+const ProfileQRCode: React.FC<ProfileQRCodeProps> = ({ userId, valueOverride, size = 224 }) => {
   const value = useMemo(() => valueOverride ?? userId, [userId, valueOverride]);
-  // Fill most of the screen width: card margin (16*2) + card pad (20*2) + panel pad (18*2).
-  const qrSize = size ?? Math.min(SCREEN_W - 108, 340);
+  const qrSize = size;
 
   return (
     <View
