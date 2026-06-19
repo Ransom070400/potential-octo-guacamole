@@ -18,6 +18,7 @@ import {
   getProfile,
   getCreatedProfileRef,
   findOwnedProfile,
+  findPeerProfileForMember,
   getConnectionAddresses,
 } from './profile';
 import {
@@ -265,10 +266,13 @@ export async function getMyConnections(address: string): Promise<Connection[]> {
   const onchain = await getProfile(ref.profileObjectId);
   if (!onchain?.allowTableId) return [];
   const addrs = await getConnectionAddresses(onchain.allowTableId);
-  const out: Connection[] = [];
-  for (const a of addrs) {
-    const peerRef = await findOwnedProfile(a);
-    if (peerRef) out.push({ address: a, profileObjectId: peerRef.profileObjectId });
-  }
-  return out;
+  // Resolve each peer to the profile that actually granted ME access — a peer who
+  // re-created their profile owns several, and only one is the one we connected to.
+  const resolved = await Promise.all(
+    addrs.map(async (a) => {
+      const pid = await findPeerProfileForMember(a, address);
+      return pid ? { address: a, profileObjectId: pid } : null;
+    })
+  );
+  return resolved.filter((c): c is Connection => c !== null);
 }

@@ -199,3 +199,39 @@ export async function findOwnedProfile(
   const fields = (cap.data!.content as any).fields as Record<string, any>;
   return { profileObjectId: fields.profile_id, ownerCapId: cap.data!.objectId };
 }
+
+/**
+ * Resolve a peer's address to the Profile we're actually connected to: the one whose
+ * allow table contains `memberAddress`. A peer who re-created their profile (auto-heal)
+ * owns more than one Profile, and only ONE granted us access — picking the wrong one
+ * would deny us (looks like "waiting for them to share back"). Falls back to their
+ * first profile when there's only one (or none match).
+ */
+export async function findPeerProfileForMember(
+  peerAddress: string,
+  memberAddress: string
+): Promise<string | null> {
+  const caps = await suiClient.getOwnedObjects({
+    owner: peerAddress,
+    filter: { StructType: `${PINGOU_PACKAGE_ID}::profile::OwnerCap` },
+    options: { showContent: true },
+  });
+  const profileIds = caps.data
+    .filter((c) => c.data?.content && c.data.content.dataType === 'moveObject')
+    .map((c) => (c.data!.content as any).fields.profile_id as string);
+  if (profileIds.length <= 1) return profileIds[0] ?? null;
+  for (const pid of profileIds) {
+    const oc = await getProfile(pid);
+    if (!oc?.allowTableId) continue;
+    try {
+      const f = await suiClient.getDynamicFieldObject({
+        parentId: oc.allowTableId,
+        name: { type: 'address', value: memberAddress },
+      });
+      if (f.data) return pid; // memberAddress is in this profile's allow table
+    } catch {
+      // not a member of this one; try the next
+    }
+  }
+  return profileIds[0];
+}
