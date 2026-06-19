@@ -15,6 +15,7 @@ import {
   buildSetBlobTx,
   buildExchangeTx,
   buildRemoveAccessTx,
+  buildDeleteProfileTx,
   getProfile,
   getCreatedProfileRef,
   findOwnedProfile,
@@ -29,8 +30,11 @@ import {
   setCachedOwnProfile,
   getActiveCap,
   setActiveCap,
+  clearActiveCap,
+  clearCachedOwnProfile,
   type CachedCard,
 } from './profileCache';
+import { clearProfileSession } from './seal';
 import { generateShareCode, shareCodeBytes, type ConnectPayload } from './share';
 import { shareCodeHash } from './shareHash';
 import { sponsorAndExecute } from './sponsor';
@@ -252,6 +256,31 @@ export async function removeConnection(
     signer,
     address
   );
+}
+
+/**
+ * Delete the caller's card: revoke every granted address and clear the on-chain blob
+ * pointer (one sponsored tx), then wipe local caches + the Seal session. The encrypted
+ * card becomes unreachable and nobody retains access. (The shared Profile shell can't
+ * be destroyed on-chain.) Safe no-op if there's no profile.
+ */
+export async function deleteOwnProfile(address: string, signer: ZkLoginSigner): Promise<void> {
+  const ref = await findOwned(address);
+  if (ref) {
+    const onchain = await getProfile(ref.profileObjectId);
+    const granted = onchain?.allowTableId
+      ? await getConnectionAddresses(onchain.allowTableId)
+      : [];
+    await sponsorAndExecute(
+      buildDeleteProfileTx(ref.profileObjectId, ref.ownerCapId, granted),
+      signer,
+      address
+    );
+  }
+  // Local cleanup regardless, so the device retains nothing.
+  await clearCachedOwnProfile(address);
+  await clearActiveCap(address);
+  clearProfileSession();
 }
 
 export interface Connection {

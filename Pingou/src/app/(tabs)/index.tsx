@@ -9,7 +9,7 @@ import { useAuth } from '~/src/context/AuthProvider';
 import { useSuiAuth } from '~/src/context/SuiAuthProvider';
 import { SUI_ENABLED } from '~/src/lib/sui/config';
 import { buildConnectQR } from '~/src/lib/sui/share';
-import { getMyConnections, loadConnectionCard } from '~/src/lib/sui/profileService';
+import { getMyConnections, loadConnectionCard, deleteOwnProfile } from '~/src/lib/sui/profileService';
 import { wasAnnounced, markAnnounced } from '~/src/lib/sui/announced';
 import { onConnection } from '~/src/lib/sui/realtime';
 import ConnectionSuccess, { ConnectionSuccessData } from '~/src/components/ConnectionSuccess';
@@ -303,10 +303,23 @@ const SuiHome: React.FC = () => {
     Feedback.heavy();
     Alert.alert(
       'Delete Account',
-      'Your card is encrypted and stored on-chain, so it can’t be erased — but this signs you out and removes it from this device. Continue?',
+      'This revokes everyone’s access to your card and erases its contents, then signs you out. This can’t be undone.',
       [
         { text: 'Cancel', style: 'cancel' },
-        { text: 'Sign out', style: 'destructive', onPress: () => logout() },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            if (!address || !signer) return;
+            try {
+              await deleteOwnProfile(address, signer);
+            } catch (e: any) {
+              Alert.alert('Could not delete', e?.message ?? 'Please try again.');
+              return;
+            }
+            await logout();
+          },
+        },
       ]
     );
   };

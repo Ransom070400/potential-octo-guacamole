@@ -67,6 +67,31 @@ export function buildRemoveAccessTx(
 }
 
 /**
+ * "Delete my card": in one PTB, revoke every granted address and clear the on-chain
+ * blob pointer so the encrypted card is no longer reachable. The shared Profile shell
+ * itself can't be destroyed on-chain, but after this it holds no data and grants no
+ * access — the user's content and all access are gone.
+ */
+export function buildDeleteProfileTx(
+  profileObjectId: string,
+  ownerCapId: string,
+  grantedAddresses: string[]
+): Transaction {
+  const tx = new Transaction();
+  for (const account of grantedAddresses) {
+    tx.moveCall({
+      target: target('remove'),
+      arguments: [tx.object(profileObjectId), tx.object(ownerCapId), tx.pure.address(account)],
+    });
+  }
+  tx.moveCall({
+    target: target('set_blob'),
+    arguments: [tx.object(profileObjectId), tx.object(ownerCapId), tx.pure.string('')],
+  });
+  return tx;
+}
+
+/**
  * One sponsored tx that performs a full two-way exchange when I scan a peer:
  *   - `add_self(peer, peerCode)` — grants ME access to the peer's profile.
  *   - `add(my profile, my cap, peer)` — grants the PEER access to mine.

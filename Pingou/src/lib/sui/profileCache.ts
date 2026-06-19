@@ -111,3 +111,11 @@ export async function setActiveCap(address: string, capId: string): Promise<void
     // best-effort
   }
 }
+
+export async function clearActiveCap(address: string): Promise<void> {
+  try {
+    await AsyncStorage.removeItem(activeCapKey(address));
+  } catch {
+    // best-effort
+  }
+}

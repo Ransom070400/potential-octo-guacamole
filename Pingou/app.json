@@ -62,7 +62,8 @@
     "ios": {
       "supportsTablet": true,
       "usesAppleSignIn": true,
-      "bundleIdentifier": "com.anonymous.pingou",
+      "bundleIdentifier": "com.ezeransom.pingou",
+      "buildNumber": "1",
       "infoPlist": {
         "CFBundleURLTypes": [
           {
@@ -85,7 +86,8 @@
         "android.permission.RECORD_AUDIO",
         "android.permission.CAMERA"
       ],
-      "package": "com.anonymous.pingou",
+      "package": "com.ezeransom.pingou",
+      "versionCode": 1,
       "intentFilters": [
         {
           "action": "VIEW",
