@@ -195,6 +195,7 @@ const SuiHome: React.FC = () => {
   const iconColor = colorScheme === 'dark' ? '#ffffff' : '#111827';
   const { address, signer, profile, profileRef, busy, loading, logout, refresh } = useSuiAuth();
   const [incoming, setIncoming] = useState<ConnectionSuccessData | null>(null);
+  const [connectionCount, setConnectionCount] = useState(0);
   const knownAddrs = useRef<Set<string> | null>(null);
 
   // Instant path: the scanner notifies us over the realtime relay the moment they
@@ -230,6 +231,7 @@ const SuiHome: React.FC = () => {
       const poll = async () => {
         try {
           const conns = await getMyConnections(address);
+          setConnectionCount(conns.length);
           if (knownAddrs.current === null) {
             knownAddrs.current = new Set(conns.map((c) => c.address)); // baseline
             return;
@@ -297,6 +299,18 @@ const SuiHome: React.FC = () => {
     } catch {}
   };
 
+  const handleDeleteAccount = () => {
+    Feedback.heavy();
+    Alert.alert(
+      'Delete Account',
+      'Your card is encrypted and stored on-chain, so it can’t be erased — but this signs you out and removes it from this device. Continue?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Sign out', style: 'destructive', onPress: () => logout() },
+      ]
+    );
+  };
+
   // Show the skeleton whenever a profile load is in flight and we don't have one
   // yet — otherwise the post-login load (RPC + Walrus + Seal) would briefly flash
   // the "Create profile" screen even when a profile exists.
@@ -335,13 +349,14 @@ const SuiHome: React.FC = () => {
 
   return (
     <View className="flex-1 bg-neutral-100 dark:bg-neutral-900">
+      {/* Top-right action buttons */}
       <View
         style={{ position: 'absolute', top: insets.top + 8, right: 16, zIndex: 10, flexDirection: 'row', gap: 8 }}>
         <TouchableOpacity
-          onPress={() => router.push('/editProfile')}
+          onPress={handleShare}
           activeOpacity={0.6}
-          className="h-9 items-center justify-center rounded-full bg-neutral-200 px-4 dark:bg-neutral-800">
-          <Text className="text-xs font-semibold" style={{ color: iconColor }}>Edit</Text>
+          className="h-9 w-9 items-center justify-center rounded-full bg-neutral-200 dark:bg-neutral-800">
+          <Share2 size={16} color={iconColor} strokeWidth={2} />
         </TouchableOpacity>
         <TouchableOpacity
           onPress={handleLogout}
@@ -362,19 +377,12 @@ const SuiHome: React.FC = () => {
           avatarUrl={profile.avatar}
         />
 
+        <StatsCard pingTokens={connectionCount * TOKENS_PER_CONNECTION} connections={connectionCount} />
+
         {/* QR carries address + profile id + share-code → one scan = two-way exchange. */}
         <View className="mt-8">
           <ProfileQRCode userId={qrValue} />
         </View>
-        <TouchableOpacity
-          onPress={handleShare}
-          activeOpacity={0.7}
-          className="mx-auto mt-5 flex-row items-center rounded-full bg-neutral-200 px-5 py-2.5 dark:bg-neutral-800">
-          <Share2 size={16} color={iconColor} />
-          <Text className="ml-2 text-sm font-semibold" style={{ color: iconColor }}>
-            Share my card
-          </Text>
-        </TouchableOpacity>
 
         <View className="mt-6">
           <ContactInfo email={profile.email} phone={profile.phone} />
@@ -383,6 +391,14 @@ const SuiHome: React.FC = () => {
         <View className="mb-8 mt-6">
           <SocialLinks links={socialList} />
         </View>
+
+        {/* Delete account — bottom of profile */}
+        <TouchableOpacity
+          onPress={handleDeleteAccount}
+          className="mx-4 mb-4 flex-row items-center justify-center rounded-xl py-3">
+          <Trash2 size={16} color="#EF4444" />
+          <Text className="ml-2 text-sm text-red-500">Delete Account</Text>
+        </TouchableOpacity>
       </ScrollView>
 
       {/* Pops when someone scans us (the scanned-device side of the exchange). */}

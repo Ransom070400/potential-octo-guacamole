@@ -1,71 +1,45 @@
-import React, { useMemo } from 'react';
+import React from 'react';
 import { View, Text } from 'react-native';
 import QRCode from 'react-native-qrcode-svg';
 
-const PENGUIN = require('../../../assets/PingouLogoWOBG.png');
-
 interface ProfileQRCodeProps {
-  /** The value we encode (address / connect link). */
+  // The value we encode
   userId: string;
-  /** Optional explicit value override (e.g. a deep link). */
+  // Optional explicit value override (lets you pass a deep link later)
   valueOverride?: string;
-  /** QR size in px. */
+  // Optional size so parent can control dimensions
   size?: number;
 }
 
-/**
- * Branded QR card: a clean code with the Pingou penguin knocked out of the centre.
- * Error correction is forced to H (~30% recoverable) so the centre logo never hurts
- * scan reliability.
- */
-const ProfileQRCode: React.FC<ProfileQRCodeProps> = ({ userId, valueOverride, size = 224 }) => {
-  const value = useMemo(() => valueOverride ?? userId, [userId, valueOverride]);
-  const qrSize = size;
-
+const ProfileQRCode: React.FC<ProfileQRCodeProps> = ({ userId, valueOverride, size = 200 }) => {
   return (
-    <View
-      className="mx-4 rounded-[28px] bg-white px-5 pb-6 pt-5 dark:bg-neutral-900"
-      style={{
-        shadowColor: '#000',
-        shadowOpacity: 0.1,
-        shadowRadius: 24,
-        shadowOffset: { width: 0, height: 10 },
-        elevation: 5,
-      }}>
-      <Text className="text-2xl font-semibold text-neutral-900 dark:text-neutral-100">
+    // Card container: rounded, padded, and theme-aware background
+    <View className="mx-4 rounded-2xl bg-white p-6 shadow-sm dark:bg-neutral-900">
+      {/* Title */}
+      <Text className="text-left text-2xl font-semibold text-neutral-900 dark:text-neutral-100">
         Your QR Code
       </Text>
-      <Text className="mt-1 text-base text-neutral-500 dark:text-neutral-400">
+
+      {/* Subtitle */}
+      <Text className="mt-1 text-left text-lg text-black dark:text-neutral-400">
         Scan to connect
       </Text>
 
-      <View className="mt-5 items-center">
-        {/* White panel — keeps modules on pure white for maximum scannability */}
-        <View
-          className="rounded-3xl bg-white"
-          style={{
-            padding: 18,
-            borderWidth: 1,
-            borderColor: 'rgba(0,0,0,0.06)',
-            shadowColor: '#000',
-            shadowOpacity: 0.06,
-            shadowRadius: 12,
-            shadowOffset: { width: 0, height: 4 },
-            elevation: 2,
-          }}>
-          <QRCode
-            value={value}
-            size={qrSize}
-            ecl="H"
-            color="#0B0B0F"
-            backgroundColor="#FFFFFF"
-            quietZone={6}
-            logo={PENGUIN}
-            logoSize={qrSize * 0.2}
-            logoBackgroundColor="#FFFFFF"
-            logoMargin={6}
-            logoBorderRadius={16}
-          />
+      {/* Center the QR block */}
+      <View className="mt-6 items-center">
+        {/* Grey rounded background wrapper */}
+        <View className="rounded-3xl bg-neutral-100 p-10 shadow-sm dark:bg-neutral-800">
+          {/* Exact-fit white square so its corners align 1:1 with the QR */}
+          <View
+            style={{ width: size, height: size }}
+            className="overflow-hidden rounded-none bg-white">
+            <QRCode
+              value={valueOverride ?? userId}
+              size={size}
+              backgroundColor="transparent"
+              color="#000000"
+            />
+          </View>
         </View>
       </View>
     </View>
