@@ -204,3 +204,18 @@ server.listen(PORT, () =>
     `pingou-sponsor listening on :${PORT} (${NETWORK}) — auth:${SPONSOR_SECRET ? 'on' : 'OFF'} rate:${RATE_MAX}/${RATE_WINDOW_MS}ms ws:on`
   )
 );
+
+// Keep-alive: Render's free tier sleeps after ~15 min with no inbound traffic, which
+// gives the next user a ~30–60s cold start. While we're awake, ping our own public
+// URL every 10 min so the idle timer never trips. Render injects RENDER_EXTERNAL_URL;
+// off Render (local) this is skipped. A real cron (cron-job.org/UptimeRobot) hitting
+// /health is a more robust backstop since it can also wake a cold instance.
+const SELF_URL = process.env.RENDER_EXTERNAL_URL || process.env.SELF_URL;
+if (SELF_URL) {
+  setInterval(
+    () => {
+      fetch(`${SELF_URL.replace(/\/$/, '')}/health`).catch(() => {});
+    },
+    10 * 60 * 1000
+  ).unref();
+}
